@@ -15,7 +15,7 @@ if __name__ == "__main__":
     logger.info("=" * 60)
 
     uvicorn.run(
-        "layers.api.main:app",
+        "app.layers.api.main:app",
         host=settings.API_HOST,
         port=settings.API_PORT,
         reload=settings.DEBUG,

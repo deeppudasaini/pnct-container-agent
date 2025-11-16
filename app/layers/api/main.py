@@ -49,7 +49,6 @@ if settings.RATE_LIMIT_ENABLED:
 
 app.include_router(health.router, prefix=settings.API_PREFIX, tags=["Health"])
 app.include_router(query.router, prefix=settings.API_PREFIX, tags=["Query"])
-app.include_router(container.router, prefix=settings.API_PREFIX, tags=["Container"])
 
 
 @app.get("/")
