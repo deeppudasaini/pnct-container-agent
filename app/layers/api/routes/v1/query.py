@@ -45,24 +45,21 @@ async def process_query(
 
         await query_log_repo.create(
             user_query=request.query,
-            extracted_container=result.container_id,
-            intent=result.intent,
+            extracted_container=None,
+            intent=None,
             response_time_ms=processing_time,
             status="success",
-            workflow_id=result.workflow_id
+            workflow_id=None
         )
 
         await db.commit()
 
         return QueryResponse(
             status="success",
-            data=result.data,
+            data=result,
             metadata={
                 "query_time_ms": processing_time,
-                "workflow_id": result.workflow_id,
-                "cached": result.cached,
-                "container_id": result.container_id,
-                "intent": result.intent,
+                "cached": result.cached
             }
         )
 

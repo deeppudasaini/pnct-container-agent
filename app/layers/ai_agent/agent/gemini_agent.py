@@ -6,6 +6,7 @@ from google.genai import types
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
+import re
 
 from app.layers.ai_agent.schemas.output_schema import ContainerParseSchema
 from app.layers.mcp.clients import workflow_client
@@ -43,8 +44,7 @@ class GeminiAgent(BaseAgent):
             name="container_agent",
             description="Container management agent for retrieving information, checking availability, locations, holds, and last free days",
             instruction=SYSTEM_INSTRUCTION,
-            tools=tools,
-            output_schema=ContainerParseSchema
+            tools=tools
         )
 
         logger.info(f"Gemini agent initialized with model: {settings.GOOGLE_MODEL}")
@@ -62,7 +62,7 @@ class GeminiAgent(BaseAgent):
     async def setup_agent(self):
         pass
 
-    async def parse_query(self, query: str) -> Dict[str, Any]:
+    async def parse_query(self, query: str) -> ContainerParseSchema:
         try:
             prompt = QUERY_PARSING_PROMPT.format(query=query)
             logger.info("Sending query to Gemini for parsing")
@@ -83,18 +83,32 @@ class GeminiAgent(BaseAgent):
 
             events = runner.run(user_id="user", session_id="session", new_message=content)
 
+            final_data:ContainerParseSchema=None
             for event in events:
 
                 if event.is_final_response() and event.content:
-                    final_answer = event.content.parts[0].text.strip()
-                    print("WHAT IS FINAL ANSWER:::"+final_answer)
 
-            raise ValueError("No final response received")
+                    raw_data =event.content.parts[0].text.strip()
 
+                    final_data = self.sanitize_response(raw_data)
+            return final_data
         except Exception as e:
             logger.error(f"Gemini parsing error: {str(e)}", exc_info=True)
             raise
 
+    def sanitize_response(self, raw_response: str) -> ContainerParseSchema:
+        # Extract the JSON inside the ```json ... ``` block
+        match = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", raw_response)
+        if not match:
+            raise ValueError("Could not extract JSON from response")
+
+        json_str = match.group(1)
+
+        # Load JSON normally
+        data = json.loads(json_str)
+
+        # Let Pydantic validate and convert
+        return ContainerParseSchema(**data)
     async def generate_response(self, data: Dict[str, Any]) -> str:
         try:
             prompt = f"""

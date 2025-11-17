@@ -8,6 +8,7 @@ from app.layers.ai_agent.agent.gemini_agent import GeminiAgent
 from app.layers.ai_agent.parsers.query_parser import QueryParser
 from app.layers.ai_agent.parsers.intent_parser import IntentParser
 from app.layers.ai_agent.parsers.entity_extractor import EntityExtractor
+from app.layers.ai_agent.schemas.output_schema import ContainerParseSchema
 from app.shared.utils.logger import get_logger
 from app.shared.utils.cache import CacheManager
 from app.shared.config.constants.app_constants import ProcessingStep, StepStatus
@@ -18,12 +19,10 @@ logger = get_logger(__name__)
 
 @dataclass
 class AgentResult:
-    data: Dict[str, Any]
-    container_id: str
-    intent: str
-    workflow_id: str
+    data: ContainerParseSchema
     processing_time_ms: int
     cached: bool
+    raw_data:str
 
 
 class AgentOrchestrator:
@@ -47,42 +46,23 @@ class AgentOrchestrator:
             logger.info("Returning cached result")
             return AgentResult(
                 data=cached_result["data"],
-                container_id=cached_result["container_id"],
-                intent=cached_result["intent"],
-                workflow_id=cached_result["workflow_id"],
                 processing_time_ms=int((time.time() - start_time) * 1000),
-                cached=True
+                cached=True,
+                raw_data=""
             )
 
         parsed = await self.gemini_agent.parse_query(query)
-        print("PARSED RESPONSE FROM AGENT::"+parsed)
-        container_id = parsed.get("container_id")
-        intent = parsed.get("intent", "get_info")
-
-        if not container_id:
-            raise ValueError("Could not extract container ID from query")
-
-        logger.info(f"Extracted - Container: {container_id}, Intent: {intent}")
-
-
 
         processing_time = int((time.time() - start_time) * 1000)
 
-        cache_data = {
-            "data": parsed.data,
-            "container_id": container_id,
-            "intent": intent,
-            "workflow_id": parsed.workflow_id,
-        }
-        await self.cache.set(cache_key, cache_data, ttl=300)
+
+        await self.cache.set(cache_key, parsed, ttl=300)
 
         return AgentResult(
-            data=parsed.data,
-            container_id=container_id,
-            intent=intent,
-            workflow_id=parsed.workflow_id,
+            data=parsed,
             processing_time_ms=processing_time,
-            cached=False
+            cached=False,
+            raw_data=parsed.message
         )
 
     async def process_query_stream(

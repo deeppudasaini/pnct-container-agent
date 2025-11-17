@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, AsyncGenerator
 
+from app.layers.ai_agent.schemas.output_schema import ContainerParseSchema
+
 
 class BaseAgent(ABC):
 
     @abstractmethod
-    async def parse_query(self, query: str) -> Dict[str, Any]:
+    async def parse_query(self, query: str) -> ContainerParseSchema:
         pass
 
     @abstractmethod
