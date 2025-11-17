@@ -1,6 +1,6 @@
 import time
 import asyncio
-from typing import Dict, Any, AsyncGenerator
+from typing import Dict, Any, AsyncGenerator, Optional
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -35,178 +35,82 @@ class AgentOrchestrator:
         self.cache = CacheManager()
 
     async def process_query(self, query: str) -> AgentResult:
+        """
+        Process a query through the two-agent system:
+        1. Tool agent retrieves data
+        2. Parser agent structures the data
+        """
         start_time = time.time()
 
         logger.info(f"Agent orchestrator processing query: {query}")
 
+        # Check cache first
         cache_key = f"query:{query.lower()}"
         cached_result = await self.cache.get(cache_key)
 
-        if cached_result:
-            logger.info("Returning cached result")
-            return AgentResult(
-                data=cached_result["data"],
-                processing_time_ms=int((time.time() - start_time) * 1000),
-                cached=True,
-                raw_data=""
-            )
+        # if cached_result:
+        #     logger.info("Returning cached result")
+        #     # Reconstruct ContainerParseSchema from cached data
+        #     cached_schema = ContainerParseSchema(**cached_result["data"])
+        #     return AgentResult(
+        #         data=cached_schema,
+        #         processing_time_ms=int((time.time() - start_time) * 1000),
+        #         cached=True,
+        #         raw_data=self._safe_get_message(cached_schema)
+        #     )
 
-        parsed = await self.gemini_agent.parse_query(query)
-
-        processing_time = int((time.time() - start_time) * 1000)
-
-
-        await self.cache.set(cache_key, parsed, ttl=300)
-
-        return AgentResult(
-            data=parsed,
-            processing_time_ms=processing_time,
-            cached=False,
-            raw_data=parsed.message
-        )
-
-    async def process_query_stream(
-            self,
-            query: str
-    ) -> AsyncGenerator[SSEStepUpdate, None]:
-
-        start_time = time.time()
-
+        # Process with two-agent system
         try:
-            yield SSEStepUpdate(
-                step=ProcessingStep.PARSE_QUERY,
-                status=StepStatus.IN_PROGRESS,
-                message="Analyzing query with AI",
-                progress=20,
-                timestamp=datetime.utcnow().isoformat()
-            )
-
+            # Full pipeline: tool agent -> parser agent
             parsed = await self.gemini_agent.parse_query(query)
 
-            yield SSEStepUpdate(
-                step=ProcessingStep.PARSE_QUERY,
-                status=StepStatus.COMPLETED,
-                message="Query analyzed",
-                progress=30,
-                data={"parsed": parsed},
-                timestamp=datetime.utcnow().isoformat()
-            )
+            processing_time = int((time.time() - start_time) * 1000)
 
-            yield SSEStepUpdate(
-                step=ProcessingStep.EXTRACT_ENTITIES,
-                status=StepStatus.IN_PROGRESS,
-                message="Extracting container information",
-                progress=35,
-                timestamp=datetime.utcnow().isoformat()
-            )
+            # Cache the result (convert to dict for caching)
+            cache_data = self.gemini_agent.get_schema_dict(parsed)
+            await self.cache.set(cache_key, {"data": cache_data}, ttl=300)
 
-            container_id = parsed.get("container_id")
+            # Safely extract message
+            raw_data = self._safe_get_message(parsed)
 
-            if not container_id:
-                yield SSEStepUpdate(
-                    step=ProcessingStep.EXTRACT_ENTITIES,
-                    status=StepStatus.FAILED,
-                    message="Could not find container ID",
-                    progress=35,
-                    timestamp=datetime.utcnow().isoformat()
-                )
-                return
-
-            yield SSEStepUpdate(
-                step=ProcessingStep.EXTRACT_ENTITIES,
-                status=StepStatus.COMPLETED,
-                message=f"Found container: {container_id}",
-                progress=45,
-                data={"container_id": container_id},
-                timestamp=datetime.utcnow().isoformat()
-            )
-
-            # Step 3: Classify intent
-            yield SSEStepUpdate(
-                step=ProcessingStep.CLASSIFY_INTENT,
-                status=StepStatus.IN_PROGRESS,
-                message="Understanding query intent",
-                progress=50,
-                timestamp=datetime.utcnow().isoformat()
-            )
-
-            intent = parsed.get("intent", "get_info")
-
-            yield SSEStepUpdate(
-                step=ProcessingStep.CLASSIFY_INTENT,
-                status=StepStatus.COMPLETED,
-                message=f"Intent: {intent}",
-                progress=55,
-                data={"intent": intent},
-                timestamp=datetime.utcnow().isoformat()
-            )
-
-            yield SSEStepUpdate(
-                step=ProcessingStep.SELECT_TOOL,
-                status=StepStatus.IN_PROGRESS,
-                message="Selecting appropriate tool",
-                progress=60,
-                timestamp=datetime.utcnow().isoformat()
-            )
-
-            tool_name = self._map_intent_to_tool(intent)
-
-            yield SSEStepUpdate(
-                step=ProcessingStep.SELECT_TOOL,
-                status=StepStatus.COMPLETED,
-                message=f"Tool selected: {tool_name}",
-                progress=65,
-                data={"tool": tool_name},
-                timestamp=datetime.utcnow().isoformat()
-            )
-
-            yield SSEStepUpdate(
-                step=ProcessingStep.TRIGGER_WORKFLOW,
-                status=StepStatus.IN_PROGRESS,
-                message="Starting data collection workflow",
-                progress=70,
-                timestamp=datetime.utcnow().isoformat()
-            )
-
-            result = None;
-
-            yield SSEStepUpdate(
-                step=ProcessingStep.TRIGGER_WORKFLOW,
-                status=StepStatus.COMPLETED,
-                message="Workflow completed",
-                progress=95,
-                data={
-                    "workflow_id": result.workflow_id,
-                    "data": result.data
-                },
-                timestamp=datetime.utcnow().isoformat()
-            )
-
-            yield SSEStepUpdate(
-                step=ProcessingStep.FORMAT_RESPONSE,
-                status=StepStatus.COMPLETED,
-                message="Response ready",
-                progress=100,
-                data=result.data,
-                timestamp=datetime.utcnow().isoformat()
+            return AgentResult(
+                data=parsed,
+                processing_time_ms=processing_time,
+                cached=False,
+                raw_data=raw_data
             )
 
         except Exception as e:
-            logger.error(f"Stream processing error: {str(e)}", exc_info=True)
-            yield SSEStepUpdate(
-                step=ProcessingStep.PARSE_QUERY,
-                status=StepStatus.FAILED,
-                message=str(e),
-                progress=0,
-                timestamp=datetime.utcnow().isoformat()
+            logger.error(f"Error processing query: {str(e)}", exc_info=True)
+            # Return error result
+            error_schema = ContainerParseSchema(
+                message=f"Error processing query: {str(e)}",
+                has_errors=True,
+                error_message=str(e)
+            )
+            return AgentResult(
+                data=error_schema,
+                processing_time_ms=int((time.time() - start_time) * 1000),
+                cached=False,
+                raw_data=f"Error: {str(e)}"
             )
 
-    def _map_intent_to_tool(self, intent: str) -> str:
-        intent_tool_map = {
-            "get_info": "get_container_info",
-            "check_availability": "check_container_availability",
-            "get_location": "get_container_location",
-            "check_holds": "check_container_holds",
-            "get_lfd": "get_last_free_day",
-        }
-        return intent_tool_map.get(intent, "get_container_info")
+    def _safe_get_message(self, schema: Optional[ContainerParseSchema]) -> str:
+        """
+        Safely extract message from schema with fallbacks
+        """
+        if schema is None:
+            return "No data available"
+
+        # Try to get message using the agent's helper method
+        message = self.gemini_agent.get_message_from_schema(schema)
+
+        if message:
+            return message
+
+        # Fallback: generate message from available data
+        if schema.container_id:
+            return f"Information for container {schema.container_id} retrieved successfully."
+
+        return "Container information processed."
+

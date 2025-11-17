@@ -43,13 +43,7 @@ class ContainerParseSchema(BaseModel):
     )
 
     intent: Optional[
-        Literal[
-            "get_info",
-            "check_availability",
-            "get_location",
-            "check_holds",
-            "get_lfd"
-        ]
+        Any
     ] = Field(
         None,
         description="User intent"

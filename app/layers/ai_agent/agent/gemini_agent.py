@@ -1,30 +1,29 @@
 import json
 from typing import Dict, Any, Optional, List
-
-from google.api_core.client_options import ClientOptions
 from google.genai import types
 from google.adk.agents.llm_agent import LlmAgent
+from google.adk.agents import SequentialAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 import re
+import os
+import asyncio
 
 from app.layers.ai_agent.schemas.output_schema import ContainerParseSchema
-from app.layers.mcp.clients import workflow_client
 from app.layers.mcp.clients.workflow_client import WorkflowClient
 from app.layers.mcp.registry.tool_registry import ToolRegistry
-
 from app.shared.config.settings.base import get_settings
 from app.shared.utils.logger import get_logger
 from app.layers.ai_agent.agent.base_agent import BaseAgent
-from app.layers.ai_agent.prompts.system_prompts import QUERY_PARSING_PROMPT, SYSTEM_INSTRUCTION
-import os
+from app.layers.ai_agent.prompts.system_prompts import SYSTEM_INSTRUCTION, PARSER_INSTRUCTION
+
 settings = get_settings()
 logger = get_logger(__name__)
 
 
 class GeminiAgent(BaseAgent):
-
-    container_agent: LlmAgent = None
+    tool_agent: LlmAgent = None
+    parser_agent: LlmAgent = None
     tool_registry: ToolRegistry = None
     workflow_client: WorkflowClient = None
 
@@ -32,96 +31,394 @@ class GeminiAgent(BaseAgent):
         if not os.environ.get('GOOGLE_API_KEY'):
             os.environ['GOOGLE_API_KEY'] = settings.GOOGLE_API_KEY
             logger.info("Google API key set from settings")
+
+        # Initialize workflow client and tool registry
         self.workflow_client = WorkflowClient()
         self.tool_registry = ToolRegistry()
         self.tool_registry.initialize_with_workflow_client(self.workflow_client)
+
+        # Get registered tools
         tools = self.tool_registry.get_all_tools()
         tool_names = self.tool_registry.list_tool_names()
         logger.info(f"Available tools: {tool_names}")
 
-        self.container_agent = LlmAgent(
-            model="gemini-2.0-flash",
-            name="container_agent",
-            description="Container management agent for retrieving information, checking availability, locations, holds, and last free days",
+        # Tool Agent - calls tools and retrieves data
+        self.tool_agent = LlmAgent(
+            model="gemini-2.0-flash-exp",
+            name="tool_agent",
+            description="Agent that extracts container IDs, determines intent, and calls appropriate tools",
             instruction=SYSTEM_INSTRUCTION,
-            tools=tools
+            tools=tools,
         )
 
-        logger.info(f"Gemini agent initialized with model: {settings.GOOGLE_MODEL}")
-        logger.info(f"Registered {len(tools)} tools: {', '.join(tool_names)}")
+        # Parser Agent - structures tool results into ContainerParseSchema
+        self.parser_agent = LlmAgent(
+            model="gemini-2.0-flash-exp",
+            name="parser_agent",
+            description="Agent that parses tool results into structured ContainerParseSchema JSON",
+            instruction=PARSER_INSTRUCTION,
+            tools=[],  # No tools for parser
+        )
+
+        logger.info(f"Gemini agents initialized")
+        logger.info(f"Tool agent: {len(tools)} tools registered")
+        logger.info(f"Parser agent: JSON output mode enabled")
 
     def list_available_tools(self) -> List[str]:
+        """List all available tool names"""
         return self.tool_registry.list_tool_names()
 
     def get_tool_info(self, tool_name: str) -> Optional[Dict]:
+        """Get metadata for a specific tool"""
         return self.tool_registry.get_tool_metadata(tool_name)
 
     async def get_agent(self):
-        return self.container_agent
+        """Get the tool agent instance"""
+        return self.tool_agent
 
     async def setup_agent(self):
+        """Setup hook (unused but required by base class)"""
         pass
 
     async def parse_query(self, query: str) -> ContainerParseSchema:
-        try:
-            prompt = QUERY_PARSING_PROMPT.format(query=query)
-            logger.info("Sending query to Gemini for parsing")
+        """
+        Main entry point: Process query through two-agent pipeline
 
-            session_service = InMemorySessionService()
-            await session_service.create_session(
-                app_name=settings.APP_NAME,
-                user_id="user",
-                session_id="session"
+        Flow:
+        1. Tool agent: Extract container ID, determine intent, call tools
+        2. Parser agent: Structure results into ContainerParseSchema
+
+        Args:
+            query: User's natural language query
+
+        Returns:
+            ContainerParseSchema with structured container data
+        """
+        logger.info(f"Starting two-agent pipeline for query: {query}")
+
+        # Create session for the sequential agent
+        session_service = InMemorySessionService()
+        await session_service.create_session(
+            app_name=settings.APP_NAME,
+            user_id="sequential_user",
+            session_id="sequential_session"
+        )
+
+        # Create sequential agent pipeline
+        sequential_agent = SequentialAgent(
+            name="container_pipeline",
+            sub_agents=[self.tool_agent, self.parser_agent],
+            description="Two-stage pipeline: tool calling → JSON parsing"
+        )
+
+        runner = Runner(
+            agent=sequential_agent,
+            app_name=settings.APP_NAME,
+            session_service=session_service
+        )
+
+        # Create user message
+        content = types.Content(
+            role="user",
+            parts=[types.Part(text=query)]
+        )
+
+        # Run the pipeline
+        events = runner.run(
+            user_id="sequential_user",
+            session_id="sequential_session",
+            new_message=content
+        )
+
+        # Collect responses from both agents
+        tool_agent_response = None
+        parser_agent_response = None
+        final_schema = None
+
+        for event in events:
+            logger.debug(f"Event: {type(event).__name__}")
+
+            if event.is_final_response() and event.content:
+                raw_text = "".join([p.text for p in event.content.parts if p.text]).strip()
+
+                # Try to parse as schema
+                try:
+                    parsed = self.sanitize_response(raw_text)
+                    final_schema = parsed
+                    logger.info(
+                        f"Successfully parsed response from {event.agent_name if hasattr(event, 'agent_name') else 'agent'}")
+                except Exception as e:
+                    logger.debug(f"Response not parseable as schema (this is OK for tool agent): {e}")
+                    if tool_agent_response is None:
+                        tool_agent_response = raw_text
+
+        # Validate we got a final schema
+        if final_schema is None:
+            logger.error("Pipeline failed to produce valid ContainerParseSchema")
+            logger.error(f"Tool agent response: {tool_agent_response[:500] if tool_agent_response else 'None'}")
+
+            # Return error schema
+            return ContainerParseSchema(
+                message=tool_agent_response if len(tool_agent_response)>0 else "I apologize, but I encountered an error processing your request. Please try again or contact support.",
+                has_errors=True,
+                error_message="Failed to parse agent pipeline output into valid schema"
             )
-            runner = Runner(
-                agent=self.container_agent,
-                app_name=settings.APP_NAME,
-                session_service=session_service,
-            )
 
-            content = types.Content(role="user", parts=[types.Part(text=prompt)])
+        # Ensure message field is populated
+        if not final_schema.message:
+            final_schema.message = self._generate_default_message(final_schema)
+            logger.info(f"Generated default message: {final_schema.message}")
 
-            events = runner.run(user_id="user", session_id="session", new_message=content)
+        logger.info(
+            f"Pipeline completed successfully. Container: {final_schema.container_id}, Intent: {final_schema.intent}")
+        return final_schema
 
-            final_data:ContainerParseSchema=None
-            for event in events:
+    def _generate_default_message(self, schema: ContainerParseSchema) -> str:
+        """Generate a helpful default message based on schema content"""
 
-                if event.is_final_response() and event.content:
+        if schema.has_errors:
+            return schema.error_message or "An error occurred while processing your request."
 
-                    raw_data =event.content.parts[0].text.strip()
+        if not schema.container_id:
+            return "Please provide a container number to track."
 
-                    final_data = self.sanitize_response(raw_data)
-            return final_data
-        except Exception as e:
-            logger.error(f"Gemini parsing error: {str(e)}", exc_info=True)
-            raise
+        container_id = schema.container_id
+
+        # Check if we have container data
+        if schema.container_data:
+            data = schema.container_data
+
+            # Build message based on available data
+            msg_parts = [f"Container {container_id}"]
+
+            if data.available is not None:
+                if data.available:
+                    msg_parts.append("is available for pickup")
+                else:
+                    msg_parts.append("is not currently available")
+
+            if data.location:
+                msg_parts.append(f"at location {data.location}")
+
+            if data.has_holds and data.holds:
+                holds_str = ", ".join(data.holds)
+                msg_parts.append(f"with holds: {holds_str}")
+
+            if data.last_free_day:
+                msg_parts.append(f"(LFD: {data.last_free_day})")
+
+            return ". ".join(msg_parts) + "."
+
+        # Fallback based on intent
+        if schema.intent == "check_availability":
+            return f"Retrieved availability status for container {container_id}."
+        elif schema.intent == "get_location":
+            return f"Retrieved location information for container {container_id}."
+        elif schema.intent == "check_holds":
+            return f"Checked holds for container {container_id}."
+        elif schema.intent == "get_lfd":
+            return f"Retrieved last free day information for container {container_id}."
+        else:
+            return f"Retrieved information for container {container_id}."
 
     def sanitize_response(self, raw_response: str) -> ContainerParseSchema:
-        # Extract the JSON inside the ```json ... ``` block
-        match = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", raw_response)
-        if not match:
-            raise ValueError("Could not extract JSON from response")
+        """
+        Extract and validate JSON from agent response
 
-        json_str = match.group(1)
+        Handles:
+        - JSON in markdown code blocks
+        - Plain JSON
+        - Pydantic schema validation
+        """
+        # Remove any markdown code fences
+        match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", raw_response, re.IGNORECASE)
+        if match:
+            json_str = match.group(1)
+        else:
+            # Try to find JSON object in the response
+            json_match = re.search(r'\{[\s\S]*\}', raw_response)
+            if json_match:
+                json_str = json_match.group(0)
+            else:
+                json_str = raw_response.strip()
 
-        # Load JSON normally
-        data = json.loads(json_str)
-
-        # Let Pydantic validate and convert
-        return ContainerParseSchema(**data)
-    async def generate_response(self, data: Dict[str, Any]) -> str:
         try:
-            prompt = f"""
-Given the following container data, generate a natural, conversational response:
+            # Parse JSON
+            data = json.loads(json_str)
 
-Data: {data}
+            # Validate and create Pydantic schema
+            parsed_schema = ContainerParseSchema(**data)
 
-Generate a clear, concise response that a person would understand.
-"""
-            response = self.model.generate_content(prompt)
-            return response.text.strip()
+            logger.debug(f"Successfully created ContainerParseSchema")
+            return parsed_schema
+
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {e}")
+            logger.error(f"Attempted to parse: {json_str[:500]}")
+            raise ValueError(f"Invalid JSON in response: {e}")
+
         except Exception as e:
-            logger.error(f"Response generation error: {str(e)}", exc_info=True)
-            return "I found the container information, but had trouble formatting the response."
+            logger.error(f"Schema validation error: {e}")
+            logger.error(
+                f"Data that failed validation: {json.dumps(data, indent=2)[:500] if 'data' in locals() else 'N/A'}")
+            raise ValueError(f"Failed to create ContainerParseSchema: {e}")
 
+    def get_schema_dict(self, schema: ContainerParseSchema) -> Dict[str, Any]:
+        """Convert Pydantic schema to dictionary"""
+        if hasattr(schema, 'model_dump'):
+            return schema.model_dump()
+        elif hasattr(schema, 'dict'):
+            return schema.dict()
+        else:
+            return schema.__dict__
 
+    def get_message_from_schema(self, schema: ContainerParseSchema) -> Optional[str]:
+        """
+        Safely extract user-friendly message from schema
+
+        Priority:
+        1. schema.message if present
+        2. Generated message from schema data
+        3. Default fallback
+        """
+        if schema is None:
+            return "No data available."
+
+        # Check if message exists
+        if hasattr(schema, 'message') and schema.message:
+            return schema.message
+
+        # Try to get from dict
+        schema_dict = self.get_schema_dict(schema)
+        message = schema_dict.get('message')
+
+        if message:
+            return message
+
+        # Generate default message
+        return self._generate_default_message(schema)
+
+    async def parse_raw_data(self, data: Dict[str, Any]) -> ContainerParseSchema:
+        """
+        Parse raw data dictionary into ContainerParseSchema
+
+        Useful for converting external data sources
+        """
+        return await self.execute_parser_agent(data)
+
+    async def execute_parser_agent(self, data: Dict[str, Any]) -> ContainerParseSchema:
+        """
+        Execute parser agent standalone (without tool agent)
+
+        Args:
+            data: Raw data dictionary with query, response, etc.
+
+        Returns:
+            Structured ContainerParseSchema
+        """
+        logger.info("Executing standalone parser agent")
+
+        # Build parsing prompt
+        parsing_prompt = f"""Parse this data into ContainerParseSchema format.
+
+Query: {data.get('query', 'N/A')}
+Tool Response: {data.get('raw_response', 'N/A')}
+Additional Context: {json.dumps({k: v for k, v in data.items() if k not in ['query', 'raw_response']}, indent=2)}
+
+Output valid JSON matching ContainerParseSchema. Include a helpful message field."""
+
+        # Create session
+        session_service = InMemorySessionService()
+        await session_service.create_session(
+            app_name=settings.APP_NAME,
+            user_id="parser_user",
+            session_id="parser_session"
+        )
+
+        # Run parser
+        runner = Runner(
+            agent=self.parser_agent,
+            app_name=settings.APP_NAME,
+            session_service=session_service
+        )
+
+        content = types.Content(
+            role="user",
+            parts=[types.Part(text=parsing_prompt)]
+        )
+
+        events = runner.run(
+            user_id="parser_user",
+            session_id="parser_session",
+            new_message=content
+        )
+
+        # Get result
+        final_data = None
+        for event in events:
+            if event.is_final_response() and event.content:
+                raw_data = "".join([p.text for p in event.content.parts if p.text]).strip()
+                try:
+                    final_data = self.sanitize_response(raw_data)
+                    break
+                except Exception as e:
+                    logger.error(f"Parser failed: {e}")
+                    continue
+
+        if final_data is None:
+            raise ValueError("Parser agent failed to produce valid output")
+
+        # Ensure message
+        if not final_data.message:
+            final_data.message = self._generate_default_message(final_data)
+
+        return final_data
+
+    async def generate_response(self, data: Dict[str, Any]) -> str:
+        """
+        Generate natural language response from structured data
+
+        Args:
+            data: Dictionary with container information
+
+        Returns:
+            Natural language response string
+        """
+        logger.info("Generating natural language response")
+
+        prompt = f"""Based on this container data, provide a clear, conversational response:
+
+{json.dumps(data, indent=2)}
+
+Be helpful, specific, and mention key details like availability, location, holds, and last free day."""
+
+        session_service = InMemorySessionService()
+        await session_service.create_session(
+            app_name=settings.APP_NAME,
+            user_id="response_user",
+            session_id="response_session"
+        )
+
+        runner = Runner(
+            agent=self.tool_agent,
+            app_name=settings.APP_NAME,
+            session_service=session_service
+        )
+
+        content = types.Content(
+            role="user",
+            parts=[types.Part(text=prompt)]
+        )
+
+        events = runner.run(
+            user_id="response_user",
+            session_id="response_session",
+            new_message=content
+        )
+
+        for event in events:
+            if event.is_final_response() and event.content:
+                response_text = "".join([p.text for p in event.content.parts if p.text]).strip()
+                return response_text
+
+        return "I found the container information, but had trouble formatting the response."
