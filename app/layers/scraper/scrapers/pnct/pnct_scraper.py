@@ -43,8 +43,7 @@ class PNCTScraper(BaseScraper):
                 viewport={
                     'width': settings.BROWSER_VIEWPORT_WIDTH,
                     'height': settings.BROWSER_VIEWPORT_HEIGHT
-                },
-                user_agent=settings.SCRAPER_USER_AGENT
+                }
             )
 
             self.page = await context.new_page()

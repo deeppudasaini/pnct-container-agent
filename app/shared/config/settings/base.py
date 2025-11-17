@@ -6,7 +6,7 @@ import os
 
 class Settings(BaseSettings):
 
-    APP_NAME: str = "PNCT Container Query System"
+    APP_NAME: str = "agents"
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
     LOG_LEVEL: str = "INFO"
@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     API_WORKERS: int = 4
     API_PREFIX: str = "/api/v1"
 
-    DATABASE_URL: str = "postgresql://portpro_db:portpro_db@localhost:5432/portpro_db"
+    DATABASE_URL: str = "postgresql://portpro_db:portpro_db@localhost:5433/portpro_db"
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
     DB_ECHO: bool = False
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     TEMPORAL_WORKFLOW_TIMEOUT: int = 600
     TEMPORAL_ACTIVITY_TIMEOUT: int = 60
 
-    GOOGLE_API_KEY: str = ""
+    GOOGLE_API_KEY: str = "AIzaSyD7S_MKhlChW4vdpnBsmeVK9X5opKt2PM0"
     GOOGLE_MODEL: str = "gemini-1.5-pro"
     GOOGLE_TEMPERATURE: float = 0.1
     GOOGLE_MAX_TOKENS: int = 2048
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_HOUR: int = 1000
 
     PNCT_BASE_URL: str = "https://pnct.net"
-    PNCT_SEARCH_URL: str = "https://pnct.net/container-search"
+    PNCT_SEARCH_URL: str = "https://pnct.net"
     SCRAPER_TIMEOUT: int = 30
     SCRAPER_MAX_RETRIES: int = 3
     SCRAPER_RETRY_DELAY: int = 2
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     BROWSER_TIMEOUT: int = 30000
     BROWSER_VIEWPORT_WIDTH: int = 1920
     BROWSER_VIEWPORT_HEIGHT: int = 1080
-
+    SCRAPER_USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
     class Config:
         env_file = ".env.local"
         case_sensitive = True

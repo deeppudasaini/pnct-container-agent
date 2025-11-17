@@ -1,38 +1,22 @@
 from typing import Dict, Any
-from app.layers.mcp.tools.base_tool import BaseTool
 from app.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-class GetContainerInfoTool(BaseTool):
+class ContainerTools:
 
-    name = "get_container_info"
-    description = "Retrieve complete container information from PNCT"
 
-    def _get_parameters(self) -> Dict[str, Any]:
-        return {
-            "required": ["container_id"],
-            "properties": {
-                "container_id": {
-                    "type": "string",
-                    "description": "Container number (4 letters + 7 digits)"
-                }
-            }
-        }
+    def __init__(self, workflow_client):
 
-    async def execute(
-            self,
-            parameters: Dict[str, Any],
-            workflow_client
-    ) -> Dict[str, Any]:
-        self.validate_parameters(parameters)
+        self.workflow_client = workflow_client
+        logger.info("ContainerTools initialized")
 
-        container_id = parameters["container_id"]
+    async def get_container_info(self, container_id: str) -> Dict[str, Any]:
 
         logger.info(f"Executing get_container_info for {container_id}")
 
-        result = await workflow_client.start_workflow(
+        result = await self.workflow_client.start_workflow(
             workflow_name="container_scraper_workflow",
             workflow_input={
                 "container_id": container_id,
@@ -46,34 +30,11 @@ class GetContainerInfoTool(BaseTool):
             "status": "success"
         }
 
-
-class CheckAvailabilityTool(BaseTool):
-    name = "check_container_availability"
-    description = "Check if container is available for pickup"
-
-    def _get_parameters(self) -> Dict[str, Any]:
-        return {
-            "required": ["container_id"],
-            "properties": {
-                "container_id": {
-                    "type": "string",
-                    "description": "Container number"
-                }
-            }
-        }
-
-    async def execute(
-            self,
-            parameters: Dict[str, Any],
-            workflow_client
-    ) -> Dict[str, Any]:
-        self.validate_parameters(parameters)
-
-        container_id = parameters["container_id"]
+    async def check_container_availability(self, container_id: str) -> Dict[str, Any]:
 
         logger.info(f"Checking availability for {container_id}")
 
-        result = await workflow_client.start_workflow(
+        result = await self.workflow_client.start_workflow(
             workflow_name="container_scraper_workflow",
             workflow_input={
                 "container_id": container_id,
@@ -87,30 +48,14 @@ class CheckAvailabilityTool(BaseTool):
             "status": "success"
         }
 
+    async def get_container_location(self, container_id: str) -> Dict[str, Any]:
 
-class GetLocationTool(BaseTool):
-    name = "get_container_location"
-    description = "Get container yard location"
+        logger.info(f"Getting location for {container_id}")
 
-    def _get_parameters(self) -> Dict[str, Any]:
-        return {
-            "required": ["container_id"],
-            "properties": {
-                "container_id": {"type": "string"}
-            }
-        }
-
-    async def execute(
-            self,
-            parameters: Dict[str, Any],
-            workflow_client
-    ) -> Dict[str, Any]:
-        self.validate_parameters(parameters)
-
-        result = await workflow_client.start_workflow(
+        result = await self.workflow_client.start_workflow(
             workflow_name="container_scraper_workflow",
             workflow_input={
-                "container_id": parameters["container_id"],
+                "container_id": container_id,
                 "operation": "get_location"
             }
         )
@@ -121,30 +66,13 @@ class GetLocationTool(BaseTool):
             "status": "success"
         }
 
+    async def check_container_holds(self, container_id: str) -> Dict[str, Any]:
+        logger.info(f"Checking holds for {container_id}")
 
-class CheckHoldsTool(BaseTool):
-    name = "check_container_holds"
-    description = "Check for holds or restrictions on container"
-
-    def _get_parameters(self) -> Dict[str, Any]:
-        return {
-            "required": ["container_id"],
-            "properties": {
-                "container_id": {"type": "string"}
-            }
-        }
-
-    async def execute(
-            self,
-            parameters: Dict[str, Any],
-            workflow_client
-    ) -> Dict[str, Any]:
-        self.validate_parameters(parameters)
-
-        result = await workflow_client.start_workflow(
+        result = await self.workflow_client.start_workflow(
             workflow_name="container_scraper_workflow",
             workflow_input={
-                "container_id": parameters["container_id"],
+                "container_id": container_id,
                 "operation": "check_holds"
             }
         )
@@ -155,31 +83,13 @@ class CheckHoldsTool(BaseTool):
             "status": "success"
         }
 
+    async def get_last_free_day(self, container_id: str) -> Dict[str, Any]:
+        logger.info(f"Getting last free day for {container_id}")
 
-class GetLastFreeDayTool(BaseTool):
-
-    name = "get_last_free_day"
-    description = "Get last free day for container"
-
-    def _get_parameters(self) -> Dict[str, Any]:
-        return {
-            "required": ["container_id"],
-            "properties": {
-                "container_id": {"type": "string"}
-            }
-        }
-
-    async def execute(
-            self,
-            parameters: Dict[str, Any],
-            workflow_client
-    ) -> Dict[str, Any]:
-        self.validate_parameters(parameters)
-
-        result = await workflow_client.start_workflow(
+        result = await self.workflow_client.start_workflow(
             workflow_name="container_scraper_workflow",
             workflow_input={
-                "container_id": parameters["container_id"],
+                "container_id": container_id,
                 "operation": "get_lfd"
             }
         )

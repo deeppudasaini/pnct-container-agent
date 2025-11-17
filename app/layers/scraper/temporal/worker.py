@@ -49,7 +49,6 @@ async def main():
 
     logger.info("✅ Worker started successfully")
 
-    # Run worker
     await worker.run()
 
 

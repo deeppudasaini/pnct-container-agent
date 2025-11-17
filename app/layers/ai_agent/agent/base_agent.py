@@ -12,3 +12,11 @@ class BaseAgent(ABC):
     async def generate_response(self, data: Dict[str, Any]) -> str:
         pass
 
+    @abstractmethod
+    async def get_agent(self):
+        pass
+
+    @abstractmethod
+    async def setup_agent(self):
+        pass
+

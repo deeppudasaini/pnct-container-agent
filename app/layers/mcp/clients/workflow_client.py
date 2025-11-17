@@ -57,10 +57,12 @@ class WorkflowClient:
         # Start workflow
         handle = await client.start_workflow(
             ContainerScraperWorkflow.run,
-            workflow_input["container_id"],
-            workflow_input["operation"],
             id=workflow_id,
             task_queue=settings.TEMPORAL_TASK_QUEUE,
+            args=[
+                workflow_input["container_id"],
+                workflow_input["operation"]
+            ]
         )
 
         # Wait for result

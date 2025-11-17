@@ -1,6 +1,5 @@
 from temporalio import activity
 from typing import Dict, Any
-import asyncio
 
 from app.layers.scraper.scrapers.pnct.pnct_scraper import PNCTScraper
 from app.layers.scraper.parsers.container_parser import ContainerParser
@@ -11,9 +10,9 @@ from app.shared.database.repositories.repository_factory import RepositoryFactor
 logger = get_logger(__name__)
 
 
-@activity.defn
+@activity.defn(name="init_browser")  # Explicitly set activity name
 async def init_browser() -> Dict[str, Any]:
-    logger.info("Activity: Initializing browser")
+    activity.logger.info("Activity: Initializing browser")
 
     try:
         scraper = PNCTScraper()
@@ -21,7 +20,7 @@ async def init_browser() -> Dict[str, Any]:
 
         session_id = scraper.get_session_id()
 
-        logger.info(f"Browser initialized with session: {session_id}")
+        activity.logger.info(f"Browser initialized with session: {session_id}")
 
         return {
             "session_id": session_id,
@@ -29,24 +28,25 @@ async def init_browser() -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"Browser initialization failed: {str(e)}", exc_info=True)
+        activity.logger.error(f"Browser initialization failed: {str(e)}")
         raise
 
 
-@activity.defn
+@activity.defn(name="search_container")  # Explicitly set activity name
 async def search_container(
         browser_session: Dict[str, Any],
         container_id: str
 ) -> Dict[str, Any]:
-    logger.info(f"Activity: Searching container {container_id}")
+    activity.logger.info(f"Activity: Searching container {container_id}")
 
+    scraper = None
     try:
         scraper = PNCTScraper()
         await scraper.initialize()
 
         html_content = await scraper.search_container(container_id)
 
-        logger.info(f"Search completed for {container_id}")
+        activity.logger.info(f"Search completed for {container_id}")
 
         return {
             "container_id": container_id,
@@ -55,18 +55,20 @@ async def search_container(
         }
 
     except Exception as e:
-        logger.error(f"Container search failed: {str(e)}", exc_info=True)
+        activity.logger.error(f"Container search failed: {str(e)}")
         raise
     finally:
-        await scraper.close()
+        if scraper:
+            await scraper.close()
 
 
-@activity.defn
+@activity.defn(name="extract_data")
 async def extract_data(
         search_result: Dict[str, Any],
         operation: str
 ) -> Dict[str, Any]:
-    logger.info(f"Activity: Extracting data for operation: {operation}")
+    """Extract data from HTML content"""
+    activity.logger.info(f"Activity: Extracting data for operation: {operation}")
 
     try:
         html_content = search_result["html_content"]
@@ -75,22 +77,21 @@ async def extract_data(
         parser = ContainerParser()
         data = parser.parse(html_content, operation)
 
-        logger.info(f"Data extracted for {container_id}")
+        activity.logger.info(f"Data extracted for {container_id}")
 
         return data
 
     except Exception as e:
-        logger.error(f"Data extraction failed: {str(e)}", exc_info=True)
+        activity.logger.error(f"Data extraction failed: {str(e)}")
         raise
 
 
-@activity.defn
+@activity.defn(name="validate_data")
 async def validate_data(
         data: Dict[str, Any],
         container_id: str
 ) -> Dict[str, Any]:
-
-    logger.info(f"Activity: Validating data for {container_id}")
+    activity.logger.info(f"Activity: Validating data for {container_id}")
 
     try:
         required_fields = ["container_number", "status"]
@@ -102,40 +103,47 @@ async def validate_data(
         if data["container_number"] != container_id:
             raise ValueError("Container number mismatch")
 
-        logger.info(f"Data validated for {container_id}")
+        activity.logger.info(f"Data validated for {container_id}")
 
         return data
 
     except Exception as e:
-        logger.error(f"Data validation failed: {str(e)}", exc_info=True)
+        activity.logger.error(f"Data validation failed: {str(e)}")
         raise
 
 
-@activity.defn
+@activity.defn(name="store_data")
 async def store_data(
         data: Dict[str, Any],
         container_id: str
 ) -> bool:
-    logger.info(f"Activity: Storing data for {container_id}")
+    activity.logger.info(f"Activity: Storing data for {container_id}")
 
+    db = None
     try:
-        async for db in get_db():
-            repo_factory = RepositoryFactory()
-            container_repo = repo_factory.get_container_repository(db)
+        db_gen = get_db()
+        db = await anext(db_gen)
 
-            # Upsert container data
-            await container_repo.upsert(
-                container_number=container_id,
-                data=data,
-                source="PNCT"
-            )
+        repo_factory = RepositoryFactory()
+        container_repo = repo_factory.get_container_repository(db)
 
-            await db.commit()
+        await container_repo.upsert(
+            container_number=container_id,
+            data=data,
+            source="PNCT"
+        )
 
-            logger.info(f"Data stored for {container_id}")
+        await db.commit()
 
-            return True
+        activity.logger.info(f"Data stored for {container_id}")
+
+        return True
 
     except Exception as e:
-        logger.error(f"Data storage failed: {str(e)}", exc_info=True)
+        if db:
+            await db.rollback()
+        activity.logger.error(f"Data storage failed: {str(e)}")
         raise
+    finally:
+        if db:
+            await db.close()

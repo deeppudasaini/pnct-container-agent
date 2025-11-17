@@ -12,7 +12,6 @@ from app.shared.utils.logger import get_logger
 from app.shared.utils.cache import CacheManager
 from app.shared.config.constants.app_constants import ProcessingStep, StepStatus
 from app.shared.schemas.sse_schema import SSEStepUpdate
-from app.layers.mcp.handlers.tool_executor import ToolExecutor
 
 logger = get_logger(__name__)
 
@@ -56,7 +55,7 @@ class AgentOrchestrator:
             )
 
         parsed = await self.gemini_agent.parse_query(query)
-
+        print("PARSED RESPONSE FROM AGENT::"+parsed)
         container_id = parsed.get("container_id")
         intent = parsed.get("intent", "get_info")
 
@@ -66,29 +65,22 @@ class AgentOrchestrator:
         logger.info(f"Extracted - Container: {container_id}, Intent: {intent}")
 
 
-        tool_executor = ToolExecutor()
-        tool_name = self._map_intent_to_tool(intent)
-
-        result = await tool_executor.execute_tool(
-            tool_name=tool_name,
-            parameters={"container_id": container_id}
-        )
 
         processing_time = int((time.time() - start_time) * 1000)
 
         cache_data = {
-            "data": result.data,
+            "data": parsed.data,
             "container_id": container_id,
             "intent": intent,
-            "workflow_id": result.workflow_id,
+            "workflow_id": parsed.workflow_id,
         }
         await self.cache.set(cache_key, cache_data, ttl=300)
 
         return AgentResult(
-            data=result.data,
+            data=parsed.data,
             container_id=container_id,
             intent=intent,
-            workflow_id=result.workflow_id,
+            workflow_id=parsed.workflow_id,
             processing_time_ms=processing_time,
             cached=False
         )
@@ -177,7 +169,6 @@ class AgentOrchestrator:
                 timestamp=datetime.utcnow().isoformat()
             )
 
-            tool_executor = ToolExecutor()
             tool_name = self._map_intent_to_tool(intent)
 
             yield SSEStepUpdate(
@@ -197,10 +188,7 @@ class AgentOrchestrator:
                 timestamp=datetime.utcnow().isoformat()
             )
 
-            result = await tool_executor.execute_tool(
-                tool_name=tool_name,
-                parameters={"container_id": container_id}
-            )
+            result = None;
 
             yield SSEStepUpdate(
                 step=ProcessingStep.TRIGGER_WORKFLOW,

@@ -3,19 +3,18 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from typing import Dict, Any
 
-from app.shared.utils.logger import get_logger
-
-logger = get_logger(__name__)
+# DO NOT IMPORT ACTIVITIES IN WORKFLOWS!
+# Activities are referenced by their activity name string
 
 
 @workflow.defn
 class ContainerScraperWorkflow:
-
+    """Workflow for scraping container data"""
 
     @workflow.run
-    async def run(self, container_id: str, operation: str) -> Dict[str, Any]:
+    async def run(self, container_id: str, operation: str = "get_full_info") -> Dict[str, Any]:
 
-        logger.info(f"Starting workflow for container: {container_id}, operation: {operation}")
+        workflow.logger.info(f"Starting workflow for container: {container_id}, operation: {operation}")
 
         retry_policy = RetryPolicy(
             initial_interval=timedelta(seconds=1),
@@ -25,13 +24,13 @@ class ContainerScraperWorkflow:
         )
 
         try:
+
             browser_session = await workflow.execute_activity(
                 "init_browser",
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=retry_policy,
             )
-
-            logger.info("Browser initialized")
+            workflow.logger.info("Browser initialized")
 
             search_result = await workflow.execute_activity(
                 "search_container",
@@ -39,35 +38,31 @@ class ContainerScraperWorkflow:
                 start_to_close_timeout=timedelta(seconds=45),
                 retry_policy=retry_policy,
             )
-
-            logger.info("Container search completed")
+            workflow.logger.info("Container search completed")
 
             extracted_data = await workflow.execute_activity(
-                "extract_data",
+                "extract_data",  # Activity name as STRING
                 args=[search_result, operation],
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=retry_policy,
             )
-
-            logger.info("Data extracted")
+            workflow.logger.info("Data extracted")
 
             validated_data = await workflow.execute_activity(
-                "validate_data",
+                "validate_data",  # Activity name as STRING
                 args=[extracted_data, container_id],
                 start_to_close_timeout=timedelta(seconds=10),
                 retry_policy=retry_policy,
             )
-
-            logger.info("Data validated")
+            workflow.logger.info("Data validated")
 
             await workflow.execute_activity(
-                "store_data",
+                "store_data",  # Activity name as STRING
                 args=[validated_data, container_id],
                 start_to_close_timeout=timedelta(seconds=20),
                 retry_policy=retry_policy,
             )
-
-            logger.info(f"Workflow completed successfully for {container_id}")
+            workflow.logger.info(f"Workflow completed successfully for {container_id}")
 
             return {
                 "status": "success",
@@ -77,9 +72,10 @@ class ContainerScraperWorkflow:
             }
 
         except Exception as e:
-            logger.error(f"Workflow failed: {str(e)}", exc_info=True)
+            workflow.logger.error(f"Workflow failed: {str(e)}")
             return {
                 "status": "failed",
                 "container_id": container_id,
-                "error": str(e)
+                "error": str(e),
+                "operation": operation
             }

@@ -1,61 +1,104 @@
-from typing import Dict, Optional, List
-from app.layers.mcp.tools.base_tool import BaseTool
-from app.layers.mcp.tools.container_tools import (
-    GetContainerInfoTool,
-    CheckAvailabilityTool,
-    GetLocationTool,
-    CheckHoldsTool,
-    GetLastFreeDayTool
-)
+from typing import Dict, Optional, List, Any
+
+
+from app.shared.config.settings.base import get_settings
 from app.shared.utils.logger import get_logger
 
+settings = get_settings()
 logger = get_logger(__name__)
 
 
 class ToolRegistry:
 
     _instance = None
-    _tools: Dict[str, BaseTool] = {}
+    _tools: Dict[str, Any] = {}
+    _tool_metadata: Dict[str, Dict[str, Any]] = {}
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._initialize_tools()
+            cls._instance._initialized = False
         return cls._instance
 
-    def _initialize_tools(self):
-        tools = [
-            GetContainerInfoTool(),
-            CheckAvailabilityTool(),
-            GetLocationTool(),
-            CheckHoldsTool(),
-            GetLastFreeDayTool(),
-        ]
+    def __init__(self):
+        # Only initialize once
+        if not self._initialized:
+            self._tools = {}
+            self._tool_metadata = {}
+            self._initialized = True
 
-        for tool in tools:
-            self.register_tool(tool)
+    def initialize_with_workflow_client(self, workflow_client):
+        """Initialize container tools with workflow client"""
+        from app.layers.mcp.tools.container_tools import ContainerTools
 
-        logger.info(f"Registered {len(self._tools)} tools")
+        container_tools = ContainerTools(workflow_client)
 
-    def register_tool(self, tool: BaseTool):
-        self._tools[tool.name] = tool
-        logger.debug(f"Registered tool: {tool.name}")
+        # Register each method with metadata
+        self._register_tool_method(
+            name="get_container_info",
+            method=container_tools.get_container_info,
+            description="Retrieve complete container information from PNCT",
+            parameters={"container_id": "Container number (4 letters + 7 digits)"}
+        )
 
-    def get_tool(self, name: str) -> Optional[BaseTool]:
-        tool = self._tools.get(name)
+        self._register_tool_method(
+            name="check_container_availability",
+            method=container_tools.check_container_availability,
+            description="Check if container is available for pickup",
+            parameters={"container_id": "Container number"}
+        )
 
-        if not tool:
-            logger.warning(f"Tool not found: {name}")
+        self._register_tool_method(
+            name="get_container_location",
+            method=container_tools.get_container_location,
+            description="Get container yard location",
+            parameters={"container_id": "Container number"}
+        )
 
-        return tool
+        self._register_tool_method(
+            name="check_container_holds",
+            method=container_tools.check_container_holds,
+            description="Check for holds or restrictions on container",
+            parameters={"container_id": "Container number"}
+        )
 
-    def list_tools(self) -> List[str]:
+        self._register_tool_method(
+            name="get_last_free_day",
+            method=container_tools.get_last_free_day,
+            description="Get last free day for container",
+            parameters={"container_id": "Container number"}
+        )
+
+        logger.info(f"Registered {len(self._tools)} container tools")
+
+    def _register_tool_method(
+            self,
+            name: str,
+            method: Any,
+            description: str,
+            parameters: Dict[str, str]
+    ):
+        """Register a tool method with its metadata"""
+        self._tools[name] = method
+        self._tool_metadata[name] = {
+            "name": name,
+            "description": description,
+            "parameters": parameters
+        }
+        logger.debug(f"Registered tool: {name}")
+
+    def get_all_tools(self) -> List[Any]:
+        """Returns list of tool methods for ADK agent"""
+        return list(self._tools.values())
+
+    def list_tool_names(self) -> List[str]:
+        """Returns list of tool names"""
         return list(self._tools.keys())
 
-    def get_tool_metadata(self, name: str) -> Optional[dict]:
-        tool = self.get_tool(name)
+    def get_tool_metadata(self, name: str) -> Optional[Dict]:
+        """Get metadata for a specific tool"""
+        return self._tool_metadata.get(name)
 
-        if tool:
-            return tool.get_metadata().__dict__
-
-        return None
+    def get_all_metadata(self) -> Dict[str, Dict]:
+        """Get metadata for all tools"""
+        return self._tool_metadata.copy()

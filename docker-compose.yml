@@ -1,24 +1,25 @@
+version: "3.5"
 
 services:
 
-  postgres:
+  app-postgres:
+    container_name: app-postgres
     image: postgres:15-alpine
-    container_name: postgres
     environment:
       POSTGRES_USER: portpro_db
       POSTGRES_PASSWORD: portpro_db
       POSTGRES_DB: portpro_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - app_postgres_data:/var/lib/postgresql/data
+    networks:
+      - portpro-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U portpro_db"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - portpro-network
 
   redis:
     image: redis:7-alpine
@@ -27,45 +28,87 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - portpro-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  temporal-postgres:
+    container_name: temporal-postgresql
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    ports:
+      - "5432:5432"
+    volumes:
+      - temporal_postgres_data:/var/lib/postgresql/data
     networks:
       - portpro-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   temporal:
-    image: temporalio/auto-setup:latest
     container_name: temporal
+    image: temporalio/auto-setup:latest
     depends_on:
-      postgres:
+      temporal-postgres:
         condition: service_healthy
     environment:
-      DB: postgres12
-      POSTGRES_USER: portpro_db
-      POSTGRES_PWD: portpro_db
-      POSTGRES_SEEDS: postgres
-      DBNAME: portpro_db
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgresql
+      # Remove the DYNAMIC_CONFIG_FILE_PATH entirely
     ports:
       - "7233:7233"
     networks:
       - portpro-network
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  temporal-admin-tools:
+    container_name: temporal-admin-tools
+    image: temporalio/admin-tools:latest
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    stdin_open: true
+    tty: true
+    networks:
+      - portpro-network
 
   temporal-ui:
-    image: temporalio/ui:latest
     container_name: temporal-ui
+    image: temporalio/ui:latest
     depends_on:
-      - temporal
+      temporal:
+        condition: service_healthy
     environment:
-      TEMPORAL_ADDRESS: temporal:7233
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
     ports:
-      - "8088:8088"
+      - "8088:8080"
     networks:
       - portpro-network
 
 volumes:
-  postgres_data:
+  app_postgres_data:
+  temporal_postgres_data:
   redis_data:
 
 networks:
