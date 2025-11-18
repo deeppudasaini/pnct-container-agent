@@ -31,7 +31,7 @@ AVAILABLE TOOLS AND WHEN TO USE THEM:
 
 CONTAINER ID FORMATS TO RECOGNIZE:
 - Standard: 4 letters + 7 digits (e.g., ABCD1234567)
-- With spaces/dashes: ABCD 123 4567, ABCD-1234567
+- With spaces/dashes: ABCD 123 4567, ABCD-1234567. ABCD 123456 7
 - Lowercase: abcd1234567
 - Always normalize to uppercase without separators
 
