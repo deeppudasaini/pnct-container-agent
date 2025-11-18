@@ -1,10 +1,20 @@
-# How To Setup
+# Project Readme
 
 ## Overview
 
 This document explains how to set up and run the project using Docker, the main application, and the Temporal worker.
 
 ## How to Start
+
+### Create Virtual Environment and Install Dependencies
+
+Create your environment and install the required packages.
+
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
 ### Step 1: Build Docker Compose
 
