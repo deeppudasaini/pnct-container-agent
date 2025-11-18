@@ -17,7 +17,6 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 Starting PNCT Container Query System (Layer 2: API)")
-    logger.info(f"Environment: {settings.ENVIRONMENT}")
 
     await init_db()
 

@@ -21,19 +21,16 @@ class ToolRegistry:
         return cls._instance
 
     def __init__(self):
-        # Only initialize once
         if not self._initialized:
             self._tools = {}
             self._tool_metadata = {}
             self._initialized = True
 
     def initialize_with_workflow_client(self, workflow_client):
-        """Initialize container tools with workflow client"""
         from app.layers.mcp.tools.container_tools import ContainerTools
 
         container_tools = ContainerTools(workflow_client)
 
-        # Register each method with metadata
         self._register_tool_method(
             name="get_container_info",
             method=container_tools.get_container_info,
@@ -78,7 +75,6 @@ class ToolRegistry:
             description: str,
             parameters: Dict[str, str]
     ):
-        """Register a tool method with its metadata"""
         self._tools[name] = method
         self._tool_metadata[name] = {
             "name": name,
@@ -88,17 +84,13 @@ class ToolRegistry:
         logger.debug(f"Registered tool: {name}")
 
     def get_all_tools(self) -> List[Any]:
-        """Returns list of tool methods for ADK agent"""
         return list(self._tools.values())
 
     def list_tool_names(self) -> List[str]:
-        """Returns list of tool names"""
         return list(self._tools.keys())
 
     def get_tool_metadata(self, name: str) -> Optional[Dict]:
-        """Get metadata for a specific tool"""
         return self._tool_metadata.get(name)
 
     def get_all_metadata(self) -> Dict[str, Dict]:
-        """Get metadata for all tools"""
         return self._tool_metadata.copy()

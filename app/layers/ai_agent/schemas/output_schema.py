@@ -36,7 +36,6 @@ class ToolCallInfo(BaseModel):
 
 
 class ContainerParseSchema(BaseModel):
-    # Allow null values
     container_id: Optional[str] = Field(
         None,
         description="Extracted container ID from query"

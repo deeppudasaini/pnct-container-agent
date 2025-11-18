@@ -11,7 +11,7 @@ import time
 from app.layers.api.schemas.request import QueryRequest
 from app.layers.api.schemas.response import QueryResponse
 from app.layers.api.validators.query_validator import validate_query
-from app.layers.api.dependencies import get_agent_orchestrator, get_db_session, verify_api_key
+from app.layers.api.dependencies import get_agent_orchestrator, get_db_session
 from app.layers.ai_agent.agent.agent_orchestrator import AgentOrchestrator
 from app.shared.database.repositories.repository_factory import RepositoryFactory
 from app.shared.utils.logger import get_logger
@@ -24,7 +24,6 @@ class QueryService:
     async def execute_query(self, request:QueryRequest,
                             agent: AgentOrchestrator = Depends(get_agent_orchestrator),
                             db: AsyncSession = Depends(get_db_session),
-                            api_key: str = Depends(verify_api_key)
                             ) ->QueryResponse:
         start_time = time.time()
         query_log_repo = None
@@ -93,7 +92,6 @@ class QueryService:
             )
 
         except Exception as e:
-            # Unexpected errors
             logger.error(f"Query processing failed: {str(e)}", exc_info=True)
             processing_time = int((time.time() - start_time) * 1000)
 

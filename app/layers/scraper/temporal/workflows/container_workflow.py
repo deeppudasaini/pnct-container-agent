@@ -3,8 +3,6 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from typing import Dict, Any
 
-# DO NOT IMPORT ACTIVITIES IN WORKFLOWS!
-# Activities are referenced by their activity name string
 
 
 @workflow.defn

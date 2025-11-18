@@ -54,7 +54,6 @@ class WorkflowClient:
         client = await self._get_client()
 
 
-        # Start workflow
         handle = await client.start_workflow(
             ContainerScraperWorkflow.run,
             id=workflow_id,
@@ -65,7 +64,6 @@ class WorkflowClient:
             ]
         )
 
-        # Wait for result
         result = await handle.result()
 
         logger.info(

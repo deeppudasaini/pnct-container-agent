@@ -70,7 +70,6 @@ def build_dummy_html(container_number: str) -> str:
         None
     )
 
-    # If container not found → empty table body
     if container is None:
         row_html = ""
     else:

@@ -35,17 +35,14 @@ class GeminiAgent(BaseAgent):
             os.environ['GOOGLE_API_KEY'] = settings.GOOGLE_API_KEY
             logger.info("Google API key set from settings")
 
-        # Initialize workflow client and tool registry
         self.workflow_client = WorkflowClient()
         self.tool_registry = ToolRegistry()
         self.tool_registry.initialize_with_workflow_client(self.workflow_client)
 
-        # Get registered tools
         tools = self.tool_registry.get_all_tools()
         tool_names = self.tool_registry.list_tool_names()
         logger.info(f"Available tools: {tool_names}")
 
-        # Tool Agent - calls tools and retrieves data
         self.tool_agent = LlmAgent(
             model="gemini-2.0-flash-exp",
             name="tool_agent",
@@ -53,8 +50,6 @@ class GeminiAgent(BaseAgent):
             instruction=SYSTEM_INSTRUCTION,
             tools=tools,
         )
-
-        # Parser Agent - structures tool results into ContainerParseSchema
         self.parser_agent = LlmAgent(
             model="gemini-2.0-flash-exp",
             name="parser_agent",
@@ -68,15 +63,12 @@ class GeminiAgent(BaseAgent):
         logger.info(f"Parser agent: JSON output mode enabled")
 
     def list_available_tools(self) -> List[str]:
-        """List all available tool names"""
         return self.tool_registry.list_tool_names()
 
     def get_tool_info(self, tool_name: str) -> Optional[Dict]:
-        """Get metadata for a specific tool"""
         return self.tool_registry.get_tool_metadata(tool_name)
 
     async def get_agent(self):
-        """Get the tool agent instance"""
         return self.tool_agent
 
     async def setup_agent(self):

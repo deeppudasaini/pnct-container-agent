@@ -154,14 +154,14 @@ async def store_data(
         db_gen = get_db()
         db = await anext(db_gen)
 
-        repo_factory = RepositoryFactory()
-        container_repo = repo_factory.get_container_repository(db)
-
-        # await container_repo.upsert(
-        #     container_number=container_id,
-        #     data=data,
-        #     source="PNCT"
-        # )
+        # repo_factory = RepositoryFactory()
+        # container_repo = repo_factory.get_container_repository(db)
+        #
+        # # await container_repo.upsert(
+        # #     container_number=container_id,
+        # #     data=data,
+        # #     source="PNCT"
+        # # )
 
         await db.commit()
 

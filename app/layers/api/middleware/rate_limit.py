@@ -36,11 +36,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 detail="Rate limit exceeded. Please try again later."
             )
 
-        # increment with TTL
         await self.redis.incr(redis_key)
         await self.redis.expire(redis_key, self.window)
 
-        # validate request body token size
         body = await request.body()
         try:
             parsed = json.loads(body.decode("utf-8")) if body else {}

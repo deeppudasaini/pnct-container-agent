@@ -22,12 +22,6 @@ def get_repository_factory(
     return RepositoryFactory()
 
 
-def verify_api_key(
-    x_api_key: str = Header(..., alias=settings.API_KEY_HEADER)
-) -> str:
-    if x_api_key not in settings.API_KEYS:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    return x_api_key
 
 
 def get_agent_orchestrator() -> AgentOrchestrator:

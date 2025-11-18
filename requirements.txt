@@ -1,0 +1,11 @@
+asyncpg>=0.30.0
+bs4>=0.0.2
+fastapi[standard]>=0.121.2
+google-adk>=1.18.0
+google-genai>=1.50.1
+mcp[cli]>=1.21.1
+playwright>=1.56.0
+redis>=7.0.1
+structlog>=25.5.0
+temporalio>=1.19.0
+uvicorn[standard]

@@ -27,13 +27,11 @@ async def main():
     logger.info("🕷️  Starting Temporal worker (Layer 5: Scraper)")
     logger.info(f"Task queue: {TEMPORAL_TASK_QUEUE}")
 
-    # Connect to Temporal
     client = await Client.connect(
         f"{TEMPORAL_HOST}:{TEMPORAL_PORT}",
         namespace=TEMPORAL_NAMESPACE,
     )
 
-    # Create worker
     worker = Worker(
         client,
         task_queue=TEMPORAL_TASK_QUEUE,
