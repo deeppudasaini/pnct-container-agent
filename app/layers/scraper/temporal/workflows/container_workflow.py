@@ -9,12 +9,11 @@ from typing import Dict, Any
 
 @workflow.defn
 class ContainerScraperWorkflow:
-    """Workflow for scraping container data"""
 
     @workflow.run
     async def run(self, container_id: str, operation: str = "get_full_info") -> Dict[str, Any]:
 
-        workflow.logger.info(f"Starting workflow for container: {container_id}, operation: {operation}")
+        workflow.logger.info(f"Starting workflow for {container_id}, operation: {operation}")
 
         retry_policy = RetryPolicy(
             initial_interval=timedelta(seconds=1),
@@ -24,45 +23,72 @@ class ContainerScraperWorkflow:
         )
 
         try:
-
-            browser_session = await workflow.execute_activity(
-                "init_browser",
-                start_to_close_timeout=timedelta(seconds=30),
+            cached = await workflow.execute_activity(
+                "check_cached_html",
+                args=[container_id],
+                start_to_close_timeout=timedelta(seconds=10),
                 retry_policy=retry_policy,
             )
-            workflow.logger.info("Browser initialized")
 
-            search_result = await workflow.execute_activity(
-                "search_container",
-                args=[browser_session, container_id],
-                start_to_close_timeout=timedelta(seconds=45),
-                retry_policy=retry_policy,
-            )
-            workflow.logger.info("Container search completed")
+            if cached.get("found"):
+                workflow.logger.info(f"Cached html found for {container_id}")
+                search_result = {
+                    "container_id": container_id,
+                    "html_content": cached["html_content"],
+                    "status": "cached"
+                }
+
+            else:
+                browser_session = await workflow.execute_activity(
+                    "init_browser",
+                    start_to_close_timeout=timedelta(seconds=30),
+                    retry_policy=retry_policy,
+                )
+
+                workflow.logger.info("Browser initialized")
+
+                search_result = await workflow.execute_activity(
+                    "search_container",
+                    args=[browser_session, container_id],
+                    start_to_close_timeout=timedelta(seconds=45),
+                    retry_policy=retry_policy,
+                )
+
+                workflow.logger.info("Container search completed")
+
+                await workflow.execute_activity(
+                    "store_raw_html",
+                    args=[container_id, search_result["html_content"]],
+                    start_to_close_timeout=timedelta(seconds=20),
+                    retry_policy=retry_policy,
+                )
 
             extracted_data = await workflow.execute_activity(
-                "extract_data",  # Activity name as STRING
+                "extract_data",
                 args=[search_result, operation],
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=retry_policy,
             )
+
             workflow.logger.info("Data extracted")
 
             validated_data = await workflow.execute_activity(
-                "validate_data",  # Activity name as STRING
+                "validate_data",
                 args=[extracted_data, container_id],
                 start_to_close_timeout=timedelta(seconds=10),
                 retry_policy=retry_policy,
             )
+
             workflow.logger.info("Data validated")
 
             await workflow.execute_activity(
-                "store_data",  # Activity name as STRING
+                "store_data",
                 args=[validated_data, container_id],
                 start_to_close_timeout=timedelta(seconds=20),
                 retry_policy=retry_policy,
             )
-            workflow.logger.info(f"Workflow completed successfully for {container_id}")
+
+            workflow.logger.info(f"Workflow completed for {container_id}")
 
             return {
                 "status": "success",

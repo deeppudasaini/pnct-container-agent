@@ -10,6 +10,32 @@ from app.shared.database.repositories.repository_factory import RepositoryFactor
 logger = get_logger(__name__)
 
 
+@activity.defn(name="check_cached_html")
+async def check_cached_html(container_id: str) -> Dict[str, Any]:
+    activity.logger.info(f"Checking cached html for {container_id}")
+
+    db = None
+    try:
+        db_gen = get_db()
+        db = await anext(db_gen)
+
+        repo_factory = RepositoryFactory()
+        container_repo = repo_factory.get_container_scraper_repository(db)
+        cached = await container_repo.get_by_container_id(container_id)
+
+        if cached:
+            return {"found": True, "html_content": cached.raw_html, "container_id": container_id}
+
+        return {"found": False, "container_id": container_id}
+
+    except Exception as e:
+        activity.logger.error(f"Failed checking cached html: {str(e)}")
+        raise
+    finally:
+        if db:
+            await db.close()
+
+
 @activity.defn(name="init_browser")  # Explicitly set activity name
 async def init_browser() -> Dict[str, Any]:
     activity.logger.info("Activity: Initializing browser")
@@ -112,6 +138,7 @@ async def validate_data(
         raise
 
 
+
 @activity.defn(name="store_data")
 async def store_data(
         data: Dict[str, Any],
@@ -143,6 +170,32 @@ async def store_data(
         if db:
             await db.rollback()
         activity.logger.error(f"Data storage failed: {str(e)}")
+        raise
+    finally:
+        if db:
+            await db.close()
+
+@activity.defn(name="store_raw_html")
+async def store_raw_html(container_id: str, html_content: str) -> bool:
+    activity.logger.info(f"Storing raw html for {container_id}")
+
+    db = None
+    try:
+        db_gen = get_db()
+        db = await anext(db_gen)
+
+        repo_factory = RepositoryFactory()
+        container_scraper_repo = repo_factory.get_container_scraper_repository(db)
+
+        await container_scraper_repo.upsert(container_id,"" ,html_content,None,"success","")
+        await db.commit()
+
+        return True
+
+    except Exception as e:
+        if db:
+            await db.rollback()
+        activity.logger.error(f"Raw html storage failed: {str(e)}")
         raise
     finally:
         if db:

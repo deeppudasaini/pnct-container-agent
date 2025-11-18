@@ -16,7 +16,7 @@ from app.layers.scraper.temporal.activities.scraping_activities import (
     search_container,
     extract_data,
     validate_data,
-    store_data,
+    store_data, check_cached_html, store_raw_html,
 )
 from app.shared.utils.logger import get_logger
 
@@ -39,12 +39,15 @@ async def main():
         task_queue=TEMPORAL_TASK_QUEUE,
         workflows=[ContainerScraperWorkflow],
         activities=[
+            check_cached_html,
             init_browser,
             search_container,
+            store_raw_html,
             extract_data,
             validate_data,
             store_data,
-        ],
+        ]
+
     )
 
     logger.info("✅ Worker started successfully")
