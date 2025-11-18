@@ -22,6 +22,9 @@ logger = get_logger(__name__)
 
 
 class GeminiAgent(BaseAgent):
+    async def generate_response(self, data: Dict[str, Any]) -> str:
+        pass
+
     tool_agent: LlmAgent = None
     parser_agent: LlmAgent = None
     tool_registry: ToolRegistry = None
@@ -77,26 +80,11 @@ class GeminiAgent(BaseAgent):
         return self.tool_agent
 
     async def setup_agent(self):
-        """Setup hook (unused but required by base class)"""
         pass
 
     async def parse_query(self, query: str) -> ContainerParseSchema:
-        """
-        Main entry point: Process query through two-agent pipeline
-
-        Flow:
-        1. Tool agent: Extract container ID, determine intent, call tools
-        2. Parser agent: Structure results into ContainerParseSchema
-
-        Args:
-            query: User's natural language query
-
-        Returns:
-            ContainerParseSchema with structured container data
-        """
         logger.info(f"Starting two-agent pipeline for query: {query}")
 
-        # Create session for the sequential agent
         session_service = InMemorySessionService()
         await session_service.create_session(
             app_name=settings.APP_NAME,
@@ -104,7 +92,6 @@ class GeminiAgent(BaseAgent):
             session_id="sequential_session"
         )
 
-        # Create sequential agent pipeline
         sequential_agent = SequentialAgent(
             name="container_pipeline",
             sub_agents=[self.tool_agent, self.parser_agent],
@@ -117,20 +104,17 @@ class GeminiAgent(BaseAgent):
             session_service=session_service
         )
 
-        # Create user message
         content = types.Content(
             role="user",
             parts=[types.Part(text=query)]
         )
 
-        # Run the pipeline
         events = runner.run(
             user_id="sequential_user",
             session_id="sequential_session",
             new_message=content
         )
 
-        # Collect responses from both agents
         tool_agent_response = None
         parser_agent_response = None
         final_schema = None
@@ -141,7 +125,6 @@ class GeminiAgent(BaseAgent):
             if event.is_final_response() and event.content:
                 raw_text = "".join([p.text for p in event.content.parts if p.text]).strip()
 
-                # Try to parse as schema
                 try:
                     parsed = self.sanitize_response(raw_text)
                     final_schema = parsed
@@ -152,19 +135,16 @@ class GeminiAgent(BaseAgent):
                     if tool_agent_response is None:
                         tool_agent_response = raw_text
 
-        # Validate we got a final schema
         if final_schema is None:
             logger.error("Pipeline failed to produce valid ContainerParseSchema")
             logger.error(f"Tool agent response: {tool_agent_response[:500] if tool_agent_response else 'None'}")
 
-            # Return error schema
             return ContainerParseSchema(
                 message=tool_agent_response if len(tool_agent_response)>0 else "I apologize, but I encountered an error processing your request. Please try again or contact support.",
                 has_errors=True,
                 error_message="Failed to parse agent pipeline output into valid schema"
             )
 
-        # Ensure message field is populated
         if not final_schema.message:
             final_schema.message = self._generate_default_message(final_schema)
             logger.info(f"Generated default message: {final_schema.message}")
@@ -174,7 +154,6 @@ class GeminiAgent(BaseAgent):
         return final_schema
 
     def _generate_default_message(self, schema: ContainerParseSchema) -> str:
-        """Generate a helpful default message based on schema content"""
 
         if schema.has_errors:
             return schema.error_message or "An error occurred while processing your request."
@@ -184,11 +163,9 @@ class GeminiAgent(BaseAgent):
 
         container_id = schema.container_id
 
-        # Check if we have container data
         if schema.container_data:
             data = schema.container_data
 
-            # Build message based on available data
             msg_parts = [f"Container {container_id}"]
 
             if data.available is not None:
@@ -209,7 +186,6 @@ class GeminiAgent(BaseAgent):
 
             return ". ".join(msg_parts) + "."
 
-        # Fallback based on intent
         if schema.intent == "check_availability":
             return f"Retrieved availability status for container {container_id}."
         elif schema.intent == "get_location":
@@ -222,20 +198,10 @@ class GeminiAgent(BaseAgent):
             return f"Retrieved information for container {container_id}."
 
     def sanitize_response(self, raw_response: str) -> ContainerParseSchema:
-        """
-        Extract and validate JSON from agent response
-
-        Handles:
-        - JSON in markdown code blocks
-        - Plain JSON
-        - Pydantic schema validation
-        """
-        # Remove any markdown code fences
         match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", raw_response, re.IGNORECASE)
         if match:
             json_str = match.group(1)
         else:
-            # Try to find JSON object in the response
             json_match = re.search(r'\{[\s\S]*\}', raw_response)
             if json_match:
                 json_str = json_match.group(0)
@@ -243,10 +209,8 @@ class GeminiAgent(BaseAgent):
                 json_str = raw_response.strip()
 
         try:
-            # Parse JSON
             data = json.loads(json_str)
 
-            # Validate and create Pydantic schema
             parsed_schema = ContainerParseSchema(**data)
 
             logger.debug(f"Successfully created ContainerParseSchema")
@@ -264,7 +228,6 @@ class GeminiAgent(BaseAgent):
             raise ValueError(f"Failed to create ContainerParseSchema: {e}")
 
     def get_schema_dict(self, schema: ContainerParseSchema) -> Dict[str, Any]:
-        """Convert Pydantic schema to dictionary"""
         if hasattr(schema, 'model_dump'):
             return schema.model_dump()
         elif hasattr(schema, 'dict'):
@@ -273,52 +236,27 @@ class GeminiAgent(BaseAgent):
             return schema.__dict__
 
     def get_message_from_schema(self, schema: ContainerParseSchema) -> Optional[str]:
-        """
-        Safely extract user-friendly message from schema
 
-        Priority:
-        1. schema.message if present
-        2. Generated message from schema data
-        3. Default fallback
-        """
         if schema is None:
             return "No data available."
 
-        # Check if message exists
         if hasattr(schema, 'message') and schema.message:
             return schema.message
 
-        # Try to get from dict
         schema_dict = self.get_schema_dict(schema)
         message = schema_dict.get('message')
 
         if message:
             return message
 
-        # Generate default message
         return self._generate_default_message(schema)
 
     async def parse_raw_data(self, data: Dict[str, Any]) -> ContainerParseSchema:
-        """
-        Parse raw data dictionary into ContainerParseSchema
-
-        Useful for converting external data sources
-        """
         return await self.execute_parser_agent(data)
 
     async def execute_parser_agent(self, data: Dict[str, Any]) -> ContainerParseSchema:
-        """
-        Execute parser agent standalone (without tool agent)
-
-        Args:
-            data: Raw data dictionary with query, response, etc.
-
-        Returns:
-            Structured ContainerParseSchema
-        """
         logger.info("Executing standalone parser agent")
 
-        # Build parsing prompt
         parsing_prompt = f"""Parse this data into ContainerParseSchema format.
 
 Query: {data.get('query', 'N/A')}
@@ -327,7 +265,6 @@ Additional Context: {json.dumps({k: v for k, v in data.items() if k not in ['que
 
 Output valid JSON matching ContainerParseSchema. Include a helpful message field."""
 
-        # Create session
         session_service = InMemorySessionService()
         await session_service.create_session(
             app_name=settings.APP_NAME,
@@ -335,7 +272,6 @@ Output valid JSON matching ContainerParseSchema. Include a helpful message field
             session_id="parser_session"
         )
 
-        # Run parser
         runner = Runner(
             agent=self.parser_agent,
             app_name=settings.APP_NAME,
@@ -353,7 +289,6 @@ Output valid JSON matching ContainerParseSchema. Include a helpful message field
             new_message=content
         )
 
-        # Get result
         final_data = None
         for event in events:
             if event.is_final_response() and event.content:
@@ -368,57 +303,7 @@ Output valid JSON matching ContainerParseSchema. Include a helpful message field
         if final_data is None:
             raise ValueError("Parser agent failed to produce valid output")
 
-        # Ensure message
         if not final_data.message:
             final_data.message = self._generate_default_message(final_data)
 
         return final_data
-
-    async def generate_response(self, data: Dict[str, Any]) -> str:
-        """
-        Generate natural language response from structured data
-
-        Args:
-            data: Dictionary with container information
-
-        Returns:
-            Natural language response string
-        """
-        logger.info("Generating natural language response")
-
-        prompt = f"""Based on this container data, provide a clear, conversational response:
-
-{json.dumps(data, indent=2)}
-
-Be helpful, specific, and mention key details like availability, location, holds, and last free day."""
-
-        session_service = InMemorySessionService()
-        await session_service.create_session(
-            app_name=settings.APP_NAME,
-            user_id="response_user",
-            session_id="response_session"
-        )
-
-        runner = Runner(
-            agent=self.tool_agent,
-            app_name=settings.APP_NAME,
-            session_service=session_service
-        )
-
-        content = types.Content(
-            role="user",
-            parts=[types.Part(text=prompt)]
-        )
-
-        events = runner.run(
-            user_id="response_user",
-            session_id="response_session",
-            new_message=content
-        )
-
-        for event in events:
-            if event.is_final_response() and event.content:
-                response_text = "".join([p.text for p in event.content.parts if p.text]).strip()
-                return response_text
-
-        return "I found the container information, but had trouble formatting the response."

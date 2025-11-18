@@ -1,5 +1,6 @@
 """Query log database model"""
 from sqlalchemy import Column, String, DateTime, Integer, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from app.shared.database.base import Base
 
@@ -16,6 +17,7 @@ class QueryLog(Base):
     error_message = Column(Text, nullable=True)
     workflow_id = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    query_result = Column(JSONB, nullable=True)
 
     def to_dict(self):
         return {
@@ -27,5 +29,6 @@ class QueryLog(Base):
             "status": self.status,
             "workflow_id": self.workflow_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "query_result":self.query_result
         }
 

@@ -10,6 +10,8 @@ class BaseAgent(ABC):
     async def parse_query(self, query: str) -> ContainerParseSchema:
         pass
 
+
+    # It can be used to generte sse response if needed
     @abstractmethod
     async def generate_response(self, data: Dict[str, Any]) -> str:
         pass

@@ -35,22 +35,15 @@ class AgentOrchestrator:
         self.cache = CacheManager()
 
     async def process_query(self, query: str) -> AgentResult:
-        """
-        Process a query through the two-agent system:
-        1. Tool agent retrieves data
-        2. Parser agent structures the data
-        """
         start_time = time.time()
 
         logger.info(f"Agent orchestrator processing query: {query}")
 
-        # Check cache first
         cache_key = f"query:{query.lower()}"
         cached_result = await self.cache.get(cache_key)
-
+        # ignore cache result for noww
         # if cached_result:
         #     logger.info("Returning cached result")
-        #     # Reconstruct ContainerParseSchema from cached data
         #     cached_schema = ContainerParseSchema(**cached_result["data"])
         #     return AgentResult(
         #         data=cached_schema,
@@ -59,18 +52,14 @@ class AgentOrchestrator:
         #         raw_data=self._safe_get_message(cached_schema)
         #     )
 
-        # Process with two-agent system
         try:
-            # Full pipeline: tool agent -> parser agent
             parsed = await self.gemini_agent.parse_query(query)
 
             processing_time = int((time.time() - start_time) * 1000)
 
-            # Cache the result (convert to dict for caching)
             cache_data = self.gemini_agent.get_schema_dict(parsed)
             await self.cache.set(cache_key, {"data": cache_data}, ttl=300)
 
-            # Safely extract message
             raw_data = self._safe_get_message(parsed)
 
             return AgentResult(
@@ -82,7 +71,6 @@ class AgentOrchestrator:
 
         except Exception as e:
             logger.error(f"Error processing query: {str(e)}", exc_info=True)
-            # Return error result
             error_schema = ContainerParseSchema(
                 message=f"Error processing query: {str(e)}",
                 has_errors=True,
@@ -96,19 +84,14 @@ class AgentOrchestrator:
             )
 
     def _safe_get_message(self, schema: Optional[ContainerParseSchema]) -> str:
-        """
-        Safely extract message from schema with fallbacks
-        """
         if schema is None:
             return "No data available"
 
-        # Try to get message using the agent's helper method
         message = self.gemini_agent.get_message_from_schema(schema)
 
         if message:
             return message
 
-        # Fallback: generate message from available data
         if schema.container_id:
             return f"Information for container {schema.container_id} retrieved successfully."
 

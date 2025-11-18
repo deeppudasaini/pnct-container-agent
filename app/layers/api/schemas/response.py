@@ -8,7 +8,7 @@ from app.shared.schemas.response_schema import SuccessResponse, ErrorResponse
 
 class QueryResponse(BaseModel):
     status: str = "success"
-    data: AgentResult = None
+    data: str = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
     error: Optional[str] = None
 
@@ -16,11 +16,7 @@ class QueryResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "status": "success",
-                "data": {
-                    "container_number": "MSDU1234567",
-                    "status": "Available",
-                    "location": "Yard A, Row 12"
-                },
+                "data": "<LLM Message>",
                 "metadata": {
                     "query_time_ms": 2341,
                     "workflow_id": "wf-abc123",

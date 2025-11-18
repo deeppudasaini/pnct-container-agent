@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+
+from app.layers.api.middleware.error_handler import GlobalExceptionMiddleware
 from app.shared.config.settings.base import get_settings
 from app.shared.database.session import init_db, close_db
 from app.shared.utils.logger import get_logger
-from app.layers.api.routes.v1 import query, health, container
+from app.layers.api.routes.v1 import query, health
 from app.layers.api.middleware.logging import LoggingMiddleware
 from app.layers.api.middleware.rate_limit import RateLimitMiddleware
 
@@ -44,8 +46,12 @@ app.add_middleware(
 
 app.add_middleware(LoggingMiddleware)
 
+
 if settings.RATE_LIMIT_ENABLED:
     app.add_middleware(RateLimitMiddleware)
+
+
+app.add_middleware(GlobalExceptionMiddleware)
 
 app.include_router(health.router, prefix=settings.API_PREFIX, tags=["Health"])
 app.include_router(query.router, prefix=settings.API_PREFIX, tags=["Query"])

@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
     LOG_LEVEL: str = "INFO"
+    REQUEST_TOKEN_LIMIT:int=100
 
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
