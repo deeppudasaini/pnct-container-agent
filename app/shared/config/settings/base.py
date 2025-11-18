@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     TEMPORAL_WORKFLOW_TIMEOUT: int = 600
     TEMPORAL_ACTIVITY_TIMEOUT: int = 60
 
-    GOOGLE_API_KEY: str = "AIzaSyBiZxHYramU_3-AjZxc5uL7rZVqVaPWEHM"
+    GOOGLE_API_KEY: str = "AIzaSyBZMqgn2YDmyOnwM9NB9nU19329meJZ4_c"
     GOOGLE_MODEL: str = "gemini-1.5-pro"
     GOOGLE_TEMPERATURE: float = 0.1
     GOOGLE_MAX_TOKENS: int = 2048

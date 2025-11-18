@@ -32,7 +32,6 @@ class ContainerParser:
             raise DataExtractionError(f"Failed to parse container data: {str(e)}")
 
     def _parse_table_row(self, row) -> Optional[Dict[str, Any]]:
-        """Parse a single table row into a dictionary"""
         try:
             cells = row.find_all('td')
 
@@ -65,30 +64,25 @@ class ContainerParser:
             return None
 
     def _find_container_data(self, soup: BeautifulSoup) -> Optional[Dict[str, Any]]:
-        """Find and parse the first container data row from the table"""
         try:
-            # Find the table
             table = soup.find('table', class_='table')
 
             if not table:
                 logger.warning("Container table not found")
                 return None
 
-            # Find tbody
             tbody = table.find('tbody')
 
             if not tbody:
                 logger.warning("Table tbody not found")
                 return None
 
-            # Find the first data row
             rows = tbody.find_all('tr')
 
             if not rows:
                 logger.warning("No data rows found in table")
                 return None
 
-            # Parse the first row
             return self._parse_table_row(rows[0])
 
         except Exception as e:
@@ -96,25 +90,21 @@ class ContainerParser:
             return None
 
     def _find_all_containers(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
-        """Find and parse all container data rows from the table"""
         try:
             containers = []
 
-            # Find the table
             table = soup.find('table', class_='table')
 
             if not table:
                 logger.warning("Container table not found")
                 return containers
 
-            # Find tbody
             tbody = table.find('tbody')
 
             if not tbody:
                 logger.warning("Table tbody not found")
                 return containers
 
-            # Find all data rows
             rows = tbody.find_all('tr')
 
             for row in rows:
@@ -129,22 +119,18 @@ class ContainerParser:
             return []
 
     def _extract_full_info(self, soup: BeautifulSoup) -> Dict[str, Any]:
-        """Extract complete container information"""
         container_data = self._find_container_data(soup)
 
         if not container_data:
             raise DataExtractionError("No container data found in response")
 
-        # Parse holds
         holds = []
         misc_holds = container_data.get("misc_holds", "").strip().upper()
         if misc_holds and misc_holds != "NONE" and misc_holds != "":
             holds = [h.strip() for h in misc_holds.split(',') if h.strip()]
 
-        # Check if customs is released
         customs_released = container_data.get("customs_status", "").strip().upper() == "RELEASED"
 
-        # Check if freight is released
         freight_released = container_data.get("freight_status", "").strip().upper() in ["EMPTY", "RELEASED"]
 
         return {
@@ -174,7 +160,6 @@ class ContainerParser:
         }
 
     def _extract_availability(self, soup: BeautifulSoup) -> Dict[str, Any]:
-        """Extract availability information"""
         container_data = self._find_container_data(soup)
 
         if not container_data:
@@ -182,13 +167,11 @@ class ContainerParser:
 
         available = container_data.get("available", "").upper() == "YES"
 
-        # Check for any holds
         holds = []
         misc_holds = container_data.get("misc_holds", "").strip().upper()
         if misc_holds and misc_holds != "NONE" and misc_holds != "":
             holds = [h.strip() for h in misc_holds.split(',') if h.strip()]
 
-        # Check customs and freight status
         customs_ok = container_data.get("customs_status", "").strip().upper() == "RELEASED"
         freight_ok = container_data.get("freight_status", "").strip().upper() in ["EMPTY", "RELEASED"]
 
@@ -206,7 +189,6 @@ class ContainerParser:
         }
 
     def _extract_location(self, soup: BeautifulSoup) -> Dict[str, Any]:
-        """Extract location information"""
         container_data = self._find_container_data(soup)
 
         if not container_data:
@@ -214,7 +196,6 @@ class ContainerParser:
 
         location = container_data.get("location", "")
 
-        # Try to parse location format like "YARD-A-123"
         location_parts = location.split('-')
         yard = location_parts[0] if len(location_parts) > 0 else ""
         row = location_parts[1] if len(location_parts) > 1 else ""
@@ -231,24 +212,20 @@ class ContainerParser:
         }
 
     def _extract_holds(self, soup: BeautifulSoup) -> Dict[str, Any]:
-        """Extract holds information"""
         container_data = self._find_container_data(soup)
 
         if not container_data:
             raise DataExtractionError("No container data found in response")
 
-        # Parse holds from misc_holds field
         holds = []
         misc_holds = container_data.get("misc_holds", "").strip().upper()
         if misc_holds and misc_holds != "NONE" and misc_holds != "":
             holds = [h.strip() for h in misc_holds.split(',') if h.strip()]
 
-        # Add customs hold if not released
         customs_status = container_data.get("customs_status", "").strip().upper()
         if customs_status != "RELEASED":
             holds.append(f"CUSTOMS: {customs_status}")
 
-        # Add freight hold if not released
         freight_status = container_data.get("freight_status", "").strip().upper()
         if freight_status not in ["EMPTY", "RELEASED"]:
             holds.append(f"FREIGHT: {freight_status}")
@@ -264,7 +241,6 @@ class ContainerParser:
         }
 
     def _extract_lfd(self, soup: BeautifulSoup) -> Dict[str, Any]:
-        """Extract Last Free Day information"""
         container_data = self._find_container_data(soup)
 
         if not container_data:
@@ -272,7 +248,6 @@ class ContainerParser:
 
         last_free_day = container_data.get("last_free_day", "")
 
-        # Calculate days remaining if LFD is in a valid date format
         days_remaining = None
         try:
             if last_free_day:
@@ -294,14 +269,12 @@ class ContainerParser:
         }
 
     def parse_all_containers(self, html_content: str) -> List[Dict[str, Any]]:
-        """Parse all containers from the table (useful if multiple containers are returned)"""
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
             containers = self._find_all_containers(soup)
 
             result = []
             for container_data in containers:
-                # Parse holds
                 holds = []
                 misc_holds = container_data.get("misc_holds", "").strip().upper()
                 if misc_holds and misc_holds != "NONE" and misc_holds != "":

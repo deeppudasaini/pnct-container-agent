@@ -1,6 +1,7 @@
 from temporalio import activity
 from typing import Dict, Any
 
+from app.layers.scraper.scrapers.dymmy.dummy_scraper import DummyScraper
 from app.layers.scraper.scrapers.pnct.pnct_scraper import PNCTScraper
 from app.layers.scraper.parsers.container_parser import ContainerParser
 from app.shared.utils.logger import get_logger
@@ -14,26 +15,28 @@ logger = get_logger(__name__)
 async def check_cached_html(container_id: str) -> Dict[str, Any]:
     activity.logger.info(f"Checking cached html for {container_id}")
 
-    db = None
-    try:
-        db_gen = get_db()
-        db = await anext(db_gen)
+    # db = None
+    # try:
+    #     db_gen = get_db()
+    #     db = await anext(db_gen)
+    #
+    #     repo_factory = RepositoryFactory()
+    #     container_repo = repo_factory.get_container_scraper_repository(db)
+    #     cached = await container_repo.get_by_container_id(container_id)
+    #
+    #     if cached:
+    #         return {"found": True, "html_content": cached.raw_html, "container_id": container_id}
 
-        repo_factory = RepositoryFactory()
-        container_repo = repo_factory.get_container_scraper_repository(db)
-        cached = await container_repo.get_by_container_id(container_id)
+    #
+    # except Exception as e:
+    #     activity.logger.error(f"Failed checking cached html: {str(e)}")
+    #     raise
+    # finally:
+    #     if db:
+    #         await db.close()
 
-        if cached:
-            return {"found": True, "html_content": cached.raw_html, "container_id": container_id}
-
-        return {"found": False, "container_id": container_id}
-
-    except Exception as e:
-        activity.logger.error(f"Failed checking cached html: {str(e)}")
-        raise
-    finally:
-        if db:
-            await db.close()
+# Caching Removed for now. It can be further used for faster retreival from scraping
+    return {"found": False, "container_id": container_id}
 
 
 @activity.defn(name="init_browser")  # Explicitly set activity name
@@ -67,7 +70,7 @@ async def search_container(
 
     scraper = None
     try:
-        scraper = PNCTScraper()
+        scraper = DummyScraper()
         await scraper.initialize()
 
         html_content = await scraper.search_container(container_id)
