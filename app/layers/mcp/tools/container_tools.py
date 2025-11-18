@@ -23,11 +23,12 @@ class ContainerTools:
                 "operation": "get_full_info"
             }
         )
+        logger.info("Result from tool calll {result}" +str(result))
 
         return {
             "data": result.data,
             "workflow_id": result.workflow_id,
-            "status": "success"
+            "status": result.status
         }
 
     async def check_container_availability(self, container_id: str) -> Dict[str, Any]:
@@ -45,7 +46,7 @@ class ContainerTools:
         return {
             "data": result.data,
             "workflow_id": result.workflow_id,
-            "status": "success"
+            "status": result.status
         }
 
     async def get_container_location(self, container_id: str) -> Dict[str, Any]:
@@ -63,7 +64,7 @@ class ContainerTools:
         return {
             "data": result.data,
             "workflow_id": result.workflow_id,
-            "status": "success"
+            "status": result.status
         }
 
     async def check_container_holds(self, container_id: str) -> Dict[str, Any]:
@@ -80,7 +81,7 @@ class ContainerTools:
         return {
             "data": result.data,
             "workflow_id": result.workflow_id,
-            "status": "success"
+            "status": result.status
         }
 
     async def get_last_free_day(self, container_id: str) -> Dict[str, Any]:
@@ -97,5 +98,5 @@ class ContainerTools:
         return {
             "data": result.data,
             "workflow_id": result.workflow_id,
-            "status": "success"
+            "status": result.status
         }

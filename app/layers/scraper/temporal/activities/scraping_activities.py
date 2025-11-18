@@ -44,7 +44,7 @@ async def init_browser() -> Dict[str, Any]:
     activity.logger.info("Activity: Initializing browser")
 
     try:
-        scraper = PNCTScraper()
+        scraper = DummyScraper()
         await scraper.initialize()
 
         session_id = scraper.get_session_id()
