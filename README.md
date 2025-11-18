@@ -1,4 +1,4 @@
-# Project Readme
+# How To Setup
 
 ## Overview
 
@@ -27,7 +27,17 @@ Go to the folder `app/layers/scraper/temporal/` and run the worker file.
 python worker.py
 ```
 
-### Step 4: Open API Docs
+### Step 4: Configure Environment Variables
+
+Update the `Settings` class inside the shared module with your required keys and values. Anyone cloning this project must set their own environment values through that class.
+
+After adding your values, inject the secret for `GEMINI_API_KEY` using the command below.
+
+```bash
+export GOOGLE_API_KEY="your_key_here"
+```
+
+### Step 5: Open API Docs
 
 After the services are running, open the API documentation in your browser.
 

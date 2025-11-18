@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     TEMPORAL_NAMESPACE: str = "default"
     TEMPORAL_TASK_QUEUE: str = "pnct-container-tasks"
 
-    GOOGLE_API_KEY: str = "AIzaSyBZMqgn2YDmyOnwM9NB9nU19329meJZ4_c"
+    GOOGLE_API_KEY: str = "your key"
 
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
 
