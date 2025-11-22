@@ -47,3 +47,55 @@ Activities perform the actual scraping steps. This includes navigating to PNCT, 
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
+
+### Step 1: Build Docker Services
+
+Run Docker Compose from the project root to start PostgreSQL, Temporal, and other required services.
+
+### Step 2: Start the Main Application
+
+Run the main backend service:
+
+```bash
+python main.py
+```
+
+### Step 3: Start the Temporal Worker
+
+Navigate to the worker directory and start the worker:
+
+```bash
+cd app/layers/scraper/temporal/
+python worker.py
+```
+
+### Step 4: Configure Environment Variables
+
+Configure your keys inside the Settings file.
+
+Then export your Gemini API key:
+
+```bash
+export GOOGLE_API_KEY="your_key_here"
+```
+
+### Step 5: Open API Documentation
+
+After all services are running, open the docs in your browser:
+
+http://localhost:8000/api/v1/docs
+
+## Project Structure Overview
+
+* **main.py**  
+  Runs the FastAPI server and initializes the agent.
+
+* **MCP Module**  
+  Provides tool functions that communicate with the scraper API.
+
+* **PNCT Scraper API**  
+  Calls Temporal workflows and returns scraped data.
+
+* **Workflows and Activities**  
+  Define the scraping logic and interaction with PNCT.net.
