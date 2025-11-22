@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     API_WORKERS: int = 4
     API_PREFIX: str = "/api/v1"
 
-    DATABASE_URL: str = "postgresql://portpro_db:portpro_db@localhost:5433/portpro_db"
+    DATABASE_URL: str = "postgresql://user:user@localhost:5433/pnct"
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
     DB_ECHO: bool = False

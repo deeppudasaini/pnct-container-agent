@@ -2,53 +2,48 @@
 
 ## Overview
 
-This document explains how to set up and run the project using Docker, the main application, and the Temporal worker.
+This project provides a complete system for scraping PNCT container data using natural language queries. The system includes a Python API backend, a Gemini powered AI agent, an MCP tool server, and a Temporal based scraping service that runs workflows and activities to fetch real time container data from the PNCT website.
 
-## How to Start
+Users can ask questions like:
+
+* Get info for MSDU123456  
+* Is MSDU123456 available for pickup  
+* Any holds on MSDU123456  
+* Get last free day for MSDU123456  
+
+The agent extracts the container ID, determines the intent, and triggers the PNCT scraper workflow.
+
+## System Architecture Flow
+
+User Query → Python API → Gemini Agent → MCP Tool → PNCT Scraper API → Temporal Workflow → PNCT.net Scraping Activities → Response Sent to User
+
+## Architecture Details
+
+### Python API Backend
+
+The backend exposes a REST endpoint that accepts a natural language query. It initializes the Gemini agent, which processes the request and invokes MCP tools. The final structured result is prepared and sent back to the client.
+
+### AI Agent
+
+The agent uses the Google Gemini SDK. It parses user queries, extracts container numbers, interprets the intent, and calls MCP tools using structured parameters.
+
+### MCP Tool Server
+
+The MCP layer exposes functions that can be called by the agent. These functions contact the PNCT scraper API and trigger the workflow responsible for scraping container data.
+
+### PNCT Scraper API with Temporal
+
+The scraper API exposes an endpoint that initiates Temporal workflows. Each workflow handles scraping a container. Temporal manages orchestration, retries, and ensures reliability during PNCT scraping operations.
+
+### Scraping Activities
+
+Activities perform the actual scraping steps. This includes navigating to PNCT, searching for containers, parsing extracted details, and returning structured data. Playwright is used for automation and BeautifulSoup is used for parsing when needed.
+
+## How to Start the Project
 
 ### Create Virtual Environment and Install Dependencies
-
-Create your environment and install the required packages.
 
 ```bash
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
-
-### Step 1: Build Docker Compose
-
-Use Docker Compose to set up the required databases and Temporal server.
-Run the compose file from the root folder.
-
-### Step 2: Start the Main Application
-
-Run the `main.py` file located in the root folder.
-
-```bash
-python main.py
-```
-
-### Step 3: Start the Temporal Worker
-
-Go to the folder `app/layers/scraper/temporal/` and run the worker file.
-
-```bash
-python worker.py
-```
-
-### Step 4: Configure Environment Variables
-
-Update the `Settings` class inside the shared module with your required keys and values. Anyone cloning this project must set their own environment values through that class.
-
-After adding your values, inject the secret for `GEMINI_API_KEY` using the command below.
-
-```bash
-export GOOGLE_API_KEY="your_key_here"
-```
-
-### Step 5: Open API Docs
-
-After the services are running, open the API documentation in your browser.
-
-[http://localhost:8000/api/v1/docs](http://localhost:8000/api/v1/docs)

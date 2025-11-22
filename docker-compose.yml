@@ -6,17 +6,17 @@ services:
     container_name: app-postgres
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: portpro_db
-      POSTGRES_PASSWORD: portpro_db
-      POSTGRES_DB: portpro_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: user
+      POSTGRES_DB: pnct
     ports:
       - "5433:5432"
     volumes:
       - app_postgres_data:/var/lib/postgresql/data
     networks:
-      - portpro-network
+      - pnct-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U portpro_db"]
+      test: ["CMD-SHELL", "pg_isready -U pnct"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,7 +29,7 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - portpro-network
+      - pnct-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -47,7 +47,7 @@ services:
     volumes:
       - temporal_postgres_data:/var/lib/postgresql/data
     networks:
-      - portpro-network
+      - pnct-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U temporal"]
       interval: 10s
@@ -70,7 +70,7 @@ services:
     ports:
       - "7233:7233"
     networks:
-      - portpro-network
+      - pnct-network
     healthcheck:
       test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
       interval: 10s
@@ -90,7 +90,7 @@ services:
     stdin_open: true
     tty: true
     networks:
-      - portpro-network
+      - pnct-network
 
   temporal-ui:
     container_name: temporal-ui
@@ -104,7 +104,7 @@ services:
     ports:
       - "8088:8080"
     networks:
-      - portpro-network
+      - pnct-network
 
 volumes:
   app_postgres_data:
@@ -112,5 +112,5 @@ volumes:
   redis_data:
 
 networks:
-  portpro-network:
+  pnct-network:
     driver: bridge
